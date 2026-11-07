@@ -56,6 +56,10 @@ export interface AgentView {
   responsibilities: string[];
   stats: { succeeded: number; failed: number; avg_ms: number };
 }
+/** GET /agents/{id} adds the system prompt. Backend returns null provider/model until configured. */
+export interface AgentDetail extends AgentView {
+  system_prompt?: string;
+}
 export interface AgentPermissions {
   allowed_tools: string[];
   forbidden_tools: string[];
@@ -223,12 +227,15 @@ export interface CheckoutSession {
   test_methods: { id: string; label: string }[];
   simulated: true;
   failure_reason?: string | null;
+  transaction_reference?: string | null;
+  expires_at?: ISODate | null;
 }
 export type PayStatus = "SUCCEEDED" | "FAILED" | "REQUIRES_APPROVAL" | "BLOCKED";
 export interface PayResponse {
   status: PayStatus;
   message: string;
   transaction_reference: string;
+  idempotent_replay?: boolean;
 }
 
 // ---------- Demo ----------
@@ -245,7 +252,8 @@ export interface DemoScenario {
   steps: string[];
 }
 export interface DemoRunResult {
-  workflow_id: UUID;
+  scenario_id?: DemoScenarioId;
+  workflow_id: UUID | null;
   summary: string;
   details: Record<string, unknown>;
 }
@@ -455,12 +463,27 @@ export interface SecurityEvent {
   created_at: ISODate;
 }
 
+export interface SecurityOverview {
+  total: number;
+  by_severity: Partial<Record<Severity, number>>;
+  by_status: Partial<Record<SecurityEventStatus, number>>;
+  by_category: Record<string, number>;
+  recent: SecurityEvent[];
+}
+export interface InjectionVerdict {
+  detected: boolean;
+  score: number;
+  patterns: string[];
+  verdict: "INJECTION" | "CLEAN";
+}
+
 // ---------- Approvals ----------
 export type ApprovalStatus =
   | "PENDING_REVIEW"
   | "APPROVED"
   | "REJECTED"
   | "INFORMATION_REQUESTED"
+  | "INFO_REQUESTED"
   | "EXPIRED"
   | (string & {});
 export interface ApprovalDecision {
@@ -483,6 +506,16 @@ export interface Approval {
   expires_at: ISODate | null;
   created_at: ISODate;
   decisions: ApprovalDecision[];
+  security_event_id?: UUID | null;
+  payload?: Record<string, unknown>;
+}
+/** GET /approvals/{id}: approval plus resolved context. */
+export interface ApprovalDetail extends Approval {
+  context?: {
+    transaction: Transaction | null;
+    customer: Customer | null;
+    security_event: SecurityEvent | null;
+  };
 }
 
 // ---------- Strategy ----------
@@ -521,6 +554,7 @@ export interface AuditLog {
   details: Record<string, unknown>;
   ip: string | null;
   hash: string;
+  prev_hash?: string | null;
 }
 export interface AuditVerify {
   ok: boolean;
