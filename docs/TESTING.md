@@ -2,7 +2,7 @@
 
 ## Backend (pytest) — `cd apps/api && uv run pytest -q`
 
-108 tests, ~55 s, no network, no API keys (conftest forces `AI_PROVIDER=mock`). Each test gets a wiped SQLite
+111 tests, ~85 s, no network, no API keys (conftest forces `AI_PROVIDER=mock`). Each test gets a wiped SQLite
 database with reference data reseeded.
 
 | File | Covers |

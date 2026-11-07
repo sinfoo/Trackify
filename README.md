@@ -88,7 +88,7 @@ Swagger UI at http://localhost:8000/docs. Overview in [docs/API.md](docs/API.md)
 ## 12. Testing
 
 ```bash
-cd apps/api && uv run pytest -q          # 108 backend tests
+cd apps/api && uv run pytest -q          # 111 backend tests
 cd apps/web && npm test                  # unit tests
 cd apps/web && npx playwright test       # E2E (servers running)
 ```

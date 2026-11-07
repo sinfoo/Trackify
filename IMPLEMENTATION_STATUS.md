@@ -41,7 +41,7 @@ Legend: [x] done and verified · [~] partial · [ ] not done.
 
 ### Engineering
 - [x] Alembic migrations (fresh `upgrade head`, `alembic check` clean, seed after)
-- [x] Backend tests: 108 passed
+- [x] Backend tests: 111 passed
 - [x] Frontend unit tests: 14 passed; type check + lint clean
 - [x] Playwright E2E: 5 passed (dashboard, auth redirect, purchase journey, injection, RBAC)
 - [~] Docker Compose written, **not executed** (Docker daemon unavailable on build machine)
