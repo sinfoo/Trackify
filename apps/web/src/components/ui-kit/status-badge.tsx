@@ -41,6 +41,12 @@ const STATUS: Record<string, StatusDef> = {
   CANCELLED: { tone: "neutral", icon: Ban },
   REFUNDED: { tone: "info", icon: RotateCcw },
   BLOCKED: { tone: "danger", icon: ShieldAlert },
+  // orders / enrollments / products
+  PENDING_PAYMENT: { tone: "warning", icon: Clock, label: "Pending payment" },
+  PAID: { tone: "success", icon: CircleCheck },
+  ACTIVE: { tone: "success", icon: CircleCheck },
+  DRAFT: { tone: "neutral", icon: CircleDashed },
+  ARCHIVED: { tone: "neutral", icon: Ban },
   // workflows
   NEW_CUSTOMER: { tone: "info", icon: CircleDot, label: "New customer" },
   SALES_INTERACTION: { tone: "progress", icon: CircleDashed, label: "Sales interaction" },
@@ -62,6 +68,7 @@ const STATUS: Record<string, StatusDef> = {
   APPROVED: { tone: "success", icon: CircleCheck },
   REJECTED: { tone: "danger", icon: CircleX },
   INFORMATION_REQUESTED: { tone: "info", icon: CircleHelp, label: "Info requested" },
+  INFO_REQUESTED: { tone: "info", icon: CircleHelp, label: "Info requested" },
   EXPIRED: { tone: "neutral", icon: Clock },
   // security events
   OPEN: { tone: "danger", icon: TriangleAlert },
@@ -114,8 +121,8 @@ export function StatusBadge({ status, label, className }: { status: string; labe
   return <Pill def={def} label={label ?? def.label ?? humanize(key || "Unknown")} className={className} />;
 }
 
-export function SeverityBadge({ severity, className }: { severity: string; className?: string }) {
+export function SeverityBadge({ severity, label, className }: { severity: string; label?: string; className?: string }) {
   const key = (severity ?? "").toUpperCase();
   const def = SEVERITY[key] ?? { tone: "neutral" as Tone, icon: Info };
-  return <Pill def={def} label={humanize(key || "Unknown")} className={className} strong={key === "CRITICAL"} />;
+  return <Pill def={def} label={label ?? humanize(key || "Unknown")} className={className} strong={key === "CRITICAL"} />;
 }

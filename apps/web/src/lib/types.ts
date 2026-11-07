@@ -305,7 +305,7 @@ export interface Insight {
   sentiment_score: number;
   sentiment_label: string;
   purchase_intent: number;
-  hesitation: string | null;
+  hesitation: boolean;
   journey_stage: string;
   recommended_follow_up: string | null;
   confidence: number;

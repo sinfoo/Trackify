@@ -1,5 +1,6 @@
-import { Users } from "lucide-react";
-import { EmptyState, PageHeader } from "@/components/ui-kit";
+import { Suspense } from "react";
+import { PageHeader } from "@/components/ui-kit";
+import { CustomersView } from "@/features/customers/customers-view";
 
 export const metadata = { title: "Customers" };
 
@@ -7,7 +8,9 @@ export default function Page() {
   return (
     <>
       <PageHeader title="Customers" description="Profiles, journey stage, intent and history." />
-      <EmptyState icon={Users} title="This view is being built" description="Data for this page will appear here." />
+      <Suspense>
+        <CustomersView />
+      </Suspense>
     </>
   );
 }
