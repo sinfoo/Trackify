@@ -1,13 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agents.base import FORBIDDEN_TOOLS, SPECS
 from app.api.v1.common import Page, agent_out, execution_out, workflow_out
-from app.core.deps import require
+from app.core.deps import current_user, require
 from app.core.errors import AppError, not_found
 from app.db.base import get_db
 from app.models import Agent, AgentExecution, AgentMessage, ApprovalRequest, SystemEvent, User, Workflow, WorkflowState
@@ -110,8 +110,15 @@ MANUAL_TASKS = {
 
 @router.post("/agents/{agent_id}/execute")
 def execute(
-    agent_id: str, body: ExecuteIn, db: Session = Depends(get_db), user: User = Depends(require("agents:write"))
+    agent_id: str,
+    body: ExecuteIn,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
 ):
+    # Security analysts may ask the security agent to explain an alert; everything else needs agents:write.
+    perm = "security:write" if (agent_id, body.task_type) == ("security", "explain") else "agents:write"
+    require(perm)(request, user, db)
     _agent(db, agent_id)
     build = MANUAL_TASKS.get((agent_id, body.task_type))
     if not build:

@@ -25,6 +25,7 @@ import { can } from "@/lib/permissions";
 import { useMe, usePendingApprovalsCount } from "@/lib/queries";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useEventToasts } from "@/features/settings/preferences";
 import { Logo } from "./logo";
 import { NAV } from "./nav";
 
@@ -46,6 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <EventsProvider>
+      <EventToasts />
       <Shell user={me.data}>{children}</Shell>
     </EventsProvider>
   );
@@ -293,4 +295,9 @@ function ShellSkeleton() {
       </div>
     </div>
   );
+}
+
+function EventToasts() {
+  useEventToasts();
+  return null;
 }

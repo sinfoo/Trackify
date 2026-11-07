@@ -1,13 +1,12 @@
-import { ScrollText } from "lucide-react";
-import { EmptyState, PageHeader } from "@/components/ui-kit";
+import { Suspense } from "react";
+import { AuditPage } from "@/features/audit/audit-page";
 
-export const metadata = { title: "Audit" };
+export const metadata = { title: "Audit log" };
 
 export default function Page() {
   return (
-    <>
-      <PageHeader title="Audit" description="Tamper-evident log of every action." />
-      <EmptyState icon={ScrollText} title="This view is being built" description="Data for this page will appear here." />
-    </>
+    <Suspense>
+      <AuditPage />
+    </Suspense>
   );
 }

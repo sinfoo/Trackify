@@ -389,5 +389,6 @@ def audit_out(a: AuditLog) -> dict:
         "outcome": a.outcome,
         "details": a.details,
         "ip": a.ip,
+        "prev_hash": a.prev_hash,
         "hash": a.hash,
     }
