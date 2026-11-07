@@ -88,6 +88,16 @@ def agents(f: svc.Filters = F, db: Session = Depends(get_db)):
     return svc.agents(db, f)
 
 
+@router.get("/analytics/forecast")
+def forecast(db: Session = Depends(get_db)):
+    return svc.forecast(db)
+
+
+@router.get("/analytics/feedback")
+def feedback(f: svc.Filters = F, db: Session = Depends(get_db)):
+    return svc.feedback(db, f)
+
+
 @router.get("/analytics/definitions")
 def definitions():
     return svc.DEFINITIONS

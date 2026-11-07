@@ -102,3 +102,38 @@ def test_audit_scrubs_secrets(db):
         details={"password": "hunter2", "nested": {"api_key": "sk-1"}, "ok": 1},
     )
     assert e.details == {"password": "[redacted]", "nested": {"api_key": "[redacted]"}, "ok": 1}
+
+
+def test_forecast_and_feedback_analytics(db):
+    from datetime import timedelta
+
+    from conftest import checkout
+
+    from app.agents.finance import _strategy_rules
+    from app.db.base import utcnow
+    from app.models import CustomerFeedback
+    from app.orchestration import orchestrator
+
+    assert analytics.forecast(db)["points"] == []  # no history -> no invented numbers
+
+    conv, _, ps = checkout(db)
+    assert orchestrator.process_payment(db, ps, "sim_card_success", "fc-key-001")["status"] == "SUCCEEDED"
+    db.commit()
+    tx = db.scalar(select(Transaction).where(Transaction.status == TxStatus.SUCCEEDED))
+    for days in (3, 9, 15):  # spread history so a trend exists
+        db.execute(
+            update(Transaction).where(Transaction.id == tx.id).values(created_at=utcnow() - timedelta(days=days))
+        )
+    db.commit()
+    fc = analytics.forecast(db)
+    assert len(fc["points"]) == 7 and all(Decimal(p["revenue"]) >= 0 for p in fc["points"])
+    assert Decimal(fc["total"]) == sum(Decimal(p["revenue"]) for p in fc["points"])
+
+    for rating, comment in [(2, "Confusing onboarding, too long for my busy schedule"), (5, "Great"), (3, "")]:
+        db.add(CustomerFeedback(customer_id=conv.customer_id, conversation_id=conv.id, rating=rating, comment=comment))
+    db.commit()
+    fb = analytics.feedback(db, analytics.Filters())
+    assert fb["count"] == 3 and fb["low_ratings"] == 1 and fb["average"] == 3.33
+    assert {"theme": "time_constraints", "count": 1} in fb["themes"]
+    rec = next(r for r in _strategy_rules(db) if r.rule_key == "feedback_experience")
+    assert any("3.33" in fact for fact in rec.observed_facts)

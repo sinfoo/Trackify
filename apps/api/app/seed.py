@@ -412,8 +412,16 @@ def journey(db: Session, rng: random.Random, i: int, products: list[Product]) ->
             CustomerFeedback(
                 customer_id=cust.id,
                 conversation_id=conv.id,
-                rating=rng.choice([3, 4, 4, 5, 5, 5]),
-                comment=rng.choice(["Clear explanations", "Fast enrollment", "Good value", ""]),
+                rating=(rating := rng.choice([2, 3, 4, 4, 5, 5, 5])),
+                comment=rng.choice(
+                    [
+                        "Confusing onboarding, no details on the schedule",
+                        "Too long for my busy schedule",
+                        "Unfortunately the syllabus was not clear before paying",
+                    ]
+                    if rating <= 3
+                    else ["Clear explanations, great value", "Fast enrollment, helpful assistant", "Good value", ""]
+                ),
             )
         )
         db.commit()

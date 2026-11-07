@@ -123,12 +123,18 @@ def analyst_run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
     if fail_rate >= 25:
         anomalies.append(f"payment failure rate {fail_rate}% is above 25%")
 
+    fc = ctx.use("analytics.read", analytics.forecast, db)
     narrative = (
         f"Simulated revenue {Decimal(m['revenue']):,.3f} TND from {succ} successful payments "
         f"(avg {m['avg_transaction_value']} TND). Conversion {m['conversion_rate']}% across "
         f"{m['customers_engaged']} engaged customers. Last 7 days: {r_cur:,.3f} TND"
         f"{f' ({change:+}% vs prior week)' if change is not None else ''}. "
         f"Failure rate {fail_rate}%; {m['pending_payments']} payment(s) pending."
+        + (
+            f" Trend forecast next 7 days: {Decimal(fc['total']):,.3f} TND (linear model, estimate)."
+            if fc["points"]
+            else ""
+        )
     )
     cfg = ctx.config
     try:
@@ -165,6 +171,8 @@ def analyst_run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
         "revenue_change_pct": change,
         "failure_rate": fail_rate,
         "anomalies": anomalies,
+        "forecast_7d": fc["total"],
+        "forecast_r2": fc["r2"],
     }
     snap = ctx.use(
         "snapshot.write",
@@ -340,6 +348,46 @@ def _strategy_rules(db) -> list[Rec]:
                 expected_impact="Convert 10-15% of the warm pipeline (hypothesis)",
                 confidence=0.5,
                 suggested_action="Generate follow-up drafts per customer from the intelligence summaries.",
+            )
+        )
+    fb = analytics.feedback(db, f)
+    if fb["count"] >= 3 and (fb["low_ratings"] or fb["negative_comments"] or (fb["average"] or 5) < 4):
+        top = fb["themes"][0]["theme"] if fb["themes"] else None
+        recs.append(
+            Rec(
+                rule_key="feedback_experience",
+                category="JOURNEY",
+                priority="HIGH" if (fb["average"] or 5) < 3.5 else "MEDIUM",
+                title="Act on post-purchase feedback",
+                description="Customer ratings and comments point to friction after purchase. Contact low raters and "
+                "address the most cited theme in onboarding.",
+                observed_facts=[
+                    f"Average rating {fb['average']}/5 from {fb['count']} reviews",
+                    f"{fb['low_ratings']} rating(s) of 2 or less, {fb['negative_comments']} negative comment(s)",
+                ]
+                + ([f"Most cited theme in comments: {top}"] if top else []),
+                hypothesis="Fixing the friction low raters mention will raise satisfaction and referrals.",
+                metrics={"avg_rating": fb["average"], "reviews": fb["count"], "low_ratings": fb["low_ratings"]},
+                expected_impact="+0.3 to +0.5 average rating within a cohort (hypothesis)",
+                confidence=0.5,
+                suggested_action="Sales agent sends a personal follow-up to each rating of 2 or less.",
+            )
+        )
+    elif fb["count"] >= 3:
+        recs.append(
+            Rec(
+                rule_key="feedback_advocacy",
+                category="RETENTION",
+                priority="LOW",
+                title="Turn satisfied learners into referrals",
+                description="Feedback is positive. Invite satisfied customers to a referral programme.",
+                observed_facts=[f"Average rating {fb['average']}/5 from {fb['count']} reviews"],
+                hypothesis="Satisfied learners are the cheapest acquisition channel.",
+                metrics={"avg_rating": fb["average"], "reviews": fb["count"]},
+                expected_impact="Additional referred leads (hypothesis)",
+                confidence=0.45,
+                suggested_action="Draft a referral offer for admin approval (no price change without approval).",
+                requires_approval=True,
             )
         )
     return recs

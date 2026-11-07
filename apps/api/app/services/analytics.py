@@ -10,6 +10,7 @@ Definitions (also served by /analytics/definitions):
 - avg_transaction_value: revenue / succeeded transaction count.
 """
 
+import statistics
 import uuid
 from collections import Counter
 from dataclasses import dataclass
@@ -45,6 +46,7 @@ DEFINITIONS = {
     "avg_transaction_value": "Revenue ÷ number of succeeded transactions.",
     "satisfaction": "Mean customer feedback rating (1–5).",
     "security_alerts": "Security events raised in the period; high-risk = HIGH or CRITICAL severity.",
+    "forecast": "Next 7 days of simulated revenue from a least-squares linear trend on the last 30 days (estimate).",
     "objections": "Objection categories detected by the Customer Intelligence Agent (model output, not verified fact).",
 }
 
@@ -336,3 +338,72 @@ def agents(db: Session, f: Filters) -> list[dict]:
         s["avg_ms"] = round(((s["avg_ms"] * s["_n"]) + (avg or 0) * n) / (s["_n"] + n))
         s["_n"] += n
     return [{k: v for k, v in s.items() if not k.startswith("_")} for s in stats.values()]
+
+
+def forecast(db: Session, days_history: int = 30, horizon: int = 7) -> dict:
+    """Revenue forecast: ordinary least-squares trend on daily SUCCEEDED revenue (stdlib, deterministic).
+
+    ponytail: linear trend only; swap for seasonal/ML model (e.g. Prophet/ARIMA) once there is real history.
+    """
+    series = revenue_series(db, Filters(), days=days_history)
+    ys = [float(Decimal(p["revenue"])) for p in series]
+    xs = list(range(len(ys)))
+    if len(ys) < 7 or not any(ys):
+        return {
+            "method": "linear_trend",
+            "history_days": len(ys),
+            "points": [],
+            "total": "0.000",
+            "r2": None,
+            "note": "Not enough history to forecast.",
+        }
+    slope, intercept = statistics.linear_regression(xs, ys)
+    mean = statistics.fmean(ys)
+    ss_tot = sum((y - mean) ** 2 for y in ys)
+    ss_res = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(xs, ys, strict=True))
+    r2 = round(1 - ss_res / ss_tot, 3) if ss_tot else None
+    last = date.fromisoformat(series[-1]["date"])
+    points = []
+    for i in range(1, horizon + 1):
+        v = max(0.0, slope * (len(ys) - 1 + i) + intercept)
+        points.append(
+            {
+                "date": (last + timedelta(days=i)).isoformat(),
+                "revenue": str(Decimal(str(round(v, 3))).quantize(Decimal("0.001"))),
+            }
+        )
+    total = sum((Decimal(p["revenue"]) for p in points), Decimal("0")).quantize(Decimal("0.001"))
+    return {
+        "method": "linear_trend",
+        "history_days": len(ys),
+        "slope_per_day": round(slope, 3),
+        "r2": r2,
+        "points": points,
+        "total": str(total),
+        "note": "Statistical estimate from simulated history, not a financial commitment.",
+    }
+
+
+def feedback(db: Session, f: Filters) -> dict:
+    """Customer feedback: ratings distribution plus themes detected in comments (rules, no LLM)."""
+    from app.agents import intelligence as ci  # local import: agents depend on services, not the reverse
+
+    rows = db.execute(_cust(select(CustomerFeedback.rating, CustomerFeedback.comment), CustomerFeedback, f)).all()
+    dist = {str(r): 0 for r in range(1, 6)}
+    themes: Counter = Counter()
+    neg = 0
+    for rating, comment in rows:
+        dist[str(rating)] += 1
+        if comment:
+            themes.update(ci.detect_objections(comment))
+            neg += ci.sentiment(comment) < 0
+    n = len(rows)
+    avg = round(sum(r for r, _ in rows) / n, 2) if n else None
+    return {
+        "count": n,
+        "average": avg,
+        "distribution": dist,
+        "low_ratings": sum(1 for r, _ in rows if r <= 2),
+        "negative_comments": neg,
+        "themes": [{"theme": k, "count": v} for k, v in themes.most_common()],
+    }
