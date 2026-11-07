@@ -113,9 +113,15 @@ def complete(
     provider, model = resolve(provider, model)
     if provider == "mock":
         raise LLMUnavailable("mock provider")
-    if provider == "anthropic":
-        return _anthropic(system, messages, model, max_tokens)
-    return _openai(system, messages, model, max_tokens, temperature)
+    try:
+        if provider == "anthropic":
+            return _anthropic(system, messages, model, max_tokens)
+        return _openai(system, messages, model, max_tokens, temperature)
+    except LLMUnavailable:
+        raise
+    except Exception as e:  # any SDK/shape surprise must degrade to the rules engine, never a 500
+        log.warning("LLM provider %s failed: %s", provider, type(e).__name__)
+        raise LLMUnavailable(f"{type(e).__name__}") from e
 
 
 _JSON_RE = re.compile(r"\{.*\}", re.S)

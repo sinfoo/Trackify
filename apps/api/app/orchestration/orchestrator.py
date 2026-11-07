@@ -269,15 +269,14 @@ def handle_customer_message(db: Session, conv: Conversation, text: str) -> list[
         W.COMPLETED,
         W.ERROR,
         W.LOW_INTENT,
-        W.PAYMENT_SESSION,
-        W.PAYMENT_FAILED,
         W.CUSTOMER_ANALYSIS,
         W.PRODUCT_RECOMMENDATION,
     ):
         move(db, wf, W.SALES_INTERACTION, "orchestrator", "customer continued the conversation")
     elif wf.state in (W.BLOCKED, W.CANCELLED):
         raise conflict("CONVERSATION_CLOSED", "This conversation is closed")
-    # Mid-payment (checks, hold, processing, analysis): keep talking, but never move the workflow.
+    # Open checkout or mid-payment (session, retry, hold, processing): keep talking, never move the workflow,
+    # so the pending payment can still proceed from its current state.
     in_flight = wf.state not in (W.SALES_INTERACTION, W.NEW_CUSTOMER)
     msg = Message(conversation_id=conv.id, role="customer", content=text)
     db.add(msg)
