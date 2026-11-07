@@ -1,3 +1,35 @@
-from app.api.v1 import agents, auth, demo, public
+from app.api.v1 import (
+    agents,
+    analytics,
+    approvals,
+    audit,
+    auth,
+    customers,
+    demo,
+    orders,
+    payments,
+    products,
+    public,
+    security_routes,
+    settings,
+    strategy,
+    users,
+)
 
-ROUTERS = [auth.router, public.router, agents.router, demo.router]
+ROUTERS = [
+    auth.router,
+    public.router,
+    agents.router,
+    demo.router,
+    users.router,
+    customers.router,
+    products.router,
+    orders.router,
+    payments.router,
+    analytics.router,
+    security_routes.router,
+    approvals.router,
+    strategy.router,
+    audit.router,
+    settings.router,
+]

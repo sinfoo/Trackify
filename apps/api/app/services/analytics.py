@@ -62,7 +62,9 @@ class Filters:
         return cls(
             datetime.combine(date_from, time.min, UTC) if date_from else None,
             datetime.combine(date_to, time.max, UTC) if date_to else None,
-            uuid.UUID(str(product_id)) if product_id else None, segment, status,
+            uuid.UUID(str(product_id)) if product_id else None,
+            segment,
+            status,
         )
 
 
@@ -115,8 +117,13 @@ def overview(db: Session, f: Filters) -> dict:
         seg = set(db.scalars(select(Customer.id).where(Customer.segment == f.segment)))
         interested &= seg
 
-    paying = set(db.scalars(_tx(select(Transaction.customer_id).distinct(), f)
-                            .where(Transaction.status.in_([TxStatus.SUCCEEDED, TxStatus.REFUNDED]))))
+    paying = set(
+        db.scalars(
+            _tx(select(Transaction.customer_id).distinct(), f).where(
+                Transaction.status.in_([TxStatus.SUCCEEDED, TxStatus.REFUNDED])
+            )
+        )
+    )
     eligible = talking | paying  # a payer without a logged conversation is still a converted customer
     conversion = round(100 * len(paying) / len(eligible), 1) if eligible else 0.0
 
@@ -127,7 +134,8 @@ def overview(db: Session, f: Filters) -> dict:
     avg = (rev / succ).quantize(Decimal("0.001")) if succ else Decimal("0.000")
 
     enr_q = _range(select(func.count(Enrollment.id)), Enrollment.created_at, f).where(
-        Enrollment.status == EnrollmentStatus.ACTIVE)
+        Enrollment.status == EnrollmentStatus.ACTIVE
+    )
     if f.product_id:
         enr_q = enr_q.where(Enrollment.product_id == f.product_id)
     enrollments = db.scalar(enr_q) or 0
@@ -136,11 +144,22 @@ def overview(db: Session, f: Filters) -> dict:
     fb_n = db.scalar(_range(select(func.count(CustomerFeedback.id)), CustomerFeedback.created_at, f)) or 0
 
     sec_total = db.scalar(_range(select(func.count(SecurityEvent.id)), SecurityEvent.created_at, f)) or 0
-    sec_high = db.scalar(_range(select(func.count(SecurityEvent.id)), SecurityEvent.created_at, f).where(
-        SecurityEvent.severity.in_([Severity.HIGH, Severity.CRITICAL]))) or 0
+    sec_high = (
+        db.scalar(
+            _range(select(func.count(SecurityEvent.id)), SecurityEvent.created_at, f).where(
+                SecurityEvent.severity.in_([Severity.HIGH, Severity.CRITICAL])
+            )
+        )
+        or 0
+    )
     sec_open = db.scalar(select(func.count(SecurityEvent.id)).where(SecurityEvent.status == "OPEN")) or 0
-    sec_types = dict(db.execute(_range(select(SecurityEvent.event_type, func.count(SecurityEvent.id)),
-                                       SecurityEvent.created_at, f).group_by(SecurityEvent.event_type)).all())
+    sec_types = dict(
+        db.execute(
+            _range(
+                select(SecurityEvent.event_type, func.count(SecurityEvent.id)), SecurityEvent.created_at, f
+            ).group_by(SecurityEvent.event_type)
+        ).all()
+    )
 
     return {
         "interactions": interactions,
@@ -171,7 +190,7 @@ def revenue_series(db: Session, f: Filters, days: int = 30) -> list[dict]:
     buckets: dict[date, dict] = {}
     d = start
     while d <= end:
-        buckets[d] = {"date": d.isoformat(), "revenue": Decimal("0"), "succeeded": 0, "failed": 0}
+        buckets[d] = {"date": d.isoformat(), "revenue": Decimal("0.000"), "succeeded": 0, "failed": 0}
         d += timedelta(days=1)
     q = _tx(select(Transaction.created_at, Transaction.amount, Transaction.status), f)
     for created, amount, st in db.execute(q):
@@ -189,8 +208,14 @@ def revenue_series(db: Session, f: Filters, days: int = 30) -> list[dict]:
 def funnel(db: Session, f: Filters) -> list[dict]:
     o = overview(db, f)
     started = db.scalar(_tx(select(func.count(func.distinct(Transaction.customer_id))), f)) or 0
-    paid = db.scalar(_tx(select(func.count(func.distinct(Transaction.customer_id))), f).where(
-        Transaction.status.in_([TxStatus.SUCCEEDED, TxStatus.REFUNDED]))) or 0
+    paid = (
+        db.scalar(
+            _tx(select(func.count(func.distinct(Transaction.customer_id))), f).where(
+                Transaction.status.in_([TxStatus.SUCCEEDED, TxStatus.REFUNDED])
+            )
+        )
+        or 0
+    )
     return [
         {"stage": "Conversations", "customers": o["customers_engaged"]},
         {"stage": "Interested", "customers": o["interested_customers"]},
@@ -207,14 +232,31 @@ def products(db: Session, f: Filters) -> list[dict]:
         pf = Filters(f.date_from, f.date_to, p.id, f.segment)
         c = payment_counts(db, pf)
         attempts = c["SUCCEEDED"] + c["FAILED"] + c["REFUNDED"]
-        seats = db.scalar(select(func.count(Enrollment.id)).where(
-            Enrollment.product_id == p.id, Enrollment.status == EnrollmentStatus.ACTIVE)) or 0
-        out.append({
-            "product_id": str(p.id), "name": p.name, "category": p.category, "price": str(p.price),
-            "status": p.status, "revenue": str(revenue(db, pf)), "sales": c["SUCCEEDED"], "failed": c["FAILED"],
-            "payment_success_rate": round(100 * (c["SUCCEEDED"] + c["REFUNDED"]) / attempts, 1) if attempts else None,
-            "seats_taken": seats, "seats_total": p.seats_total,
-        })
+        seats = (
+            db.scalar(
+                select(func.count(Enrollment.id)).where(
+                    Enrollment.product_id == p.id, Enrollment.status == EnrollmentStatus.ACTIVE
+                )
+            )
+            or 0
+        )
+        out.append(
+            {
+                "product_id": str(p.id),
+                "name": p.name,
+                "category": p.category,
+                "price": str(p.price),
+                "status": p.status,
+                "revenue": str(revenue(db, pf)),
+                "sales": c["SUCCEEDED"],
+                "failed": c["FAILED"],
+                "payment_success_rate": round(100 * (c["SUCCEEDED"] + c["REFUNDED"]) / attempts, 1)
+                if attempts
+                else None,
+                "seats_taken": seats,
+                "seats_total": p.seats_total,
+            }
+        )
     out.sort(key=lambda r: Decimal(r["revenue"]), reverse=True)
     return out
 
@@ -255,18 +297,32 @@ def security(db: Session, f: Filters, days: int = 14) -> dict:
     while d <= end:
         series[d] = {"date": d.isoformat(), "LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
         d += timedelta(days=1)
-    for created, sev in db.execute(_range(select(SecurityEvent.created_at, SecurityEvent.severity),
-                                          SecurityEvent.created_at, f)):
+    for created, sev in db.execute(
+        _range(select(SecurityEvent.created_at, SecurityEvent.severity), SecurityEvent.created_at, f)
+    ):
         if created.date() in series:
             series[created.date()][sev.value if hasattr(sev, "value") else sev] += 1
-    by_cat = dict(db.execute(_range(select(SecurityEvent.category, func.count(SecurityEvent.id)),
-                                    SecurityEvent.created_at, f).group_by(SecurityEvent.category)).all())
+    by_cat = dict(
+        db.execute(
+            _range(select(SecurityEvent.category, func.count(SecurityEvent.id)), SecurityEvent.created_at, f).group_by(
+                SecurityEvent.category
+            )
+        ).all()
+    )
     return {"series": list(series.values()), "by_category": by_cat}
 
 
 def agents(db: Session, f: Filters) -> list[dict]:
-    q = _range(select(AgentExecution.agent_id, AgentExecution.status, func.count(AgentExecution.id),
-                      func.avg(AgentExecution.duration_ms)), AgentExecution.created_at, f)
+    q = _range(
+        select(
+            AgentExecution.agent_id,
+            AgentExecution.status,
+            func.count(AgentExecution.id),
+            func.avg(AgentExecution.duration_ms),
+        ),
+        AgentExecution.created_at,
+        f,
+    )
     stats: dict[str, dict] = {}
     for agent_id, status, n, avg in db.execute(q.group_by(AgentExecution.agent_id, AgentExecution.status)):
         s = stats.setdefault(agent_id, {"agent_id": agent_id, "succeeded": 0, "failed": 0, "avg_ms": 0, "_n": 0})

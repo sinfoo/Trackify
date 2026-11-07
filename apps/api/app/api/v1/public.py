@@ -26,7 +26,12 @@ def msg_out(m: Message) -> dict:
 
 def _conv(db: Session, conv_id: uuid.UUID, token: str | None) -> Conversation:
     conv = db.get(Conversation, conv_id)
-    if not conv or not token or not conv.access_token_hash or not secrets.compare_digest(conv.access_token_hash, sha256(token)):
+    if (
+        not conv
+        or not token
+        or not conv.access_token_hash
+        or not secrets.compare_digest(conv.access_token_hash, sha256(token))
+    ):
         raise not_found("Conversation")  # same response for wrong token: no enumeration
     return conv
 
@@ -56,15 +61,26 @@ class StartIn(BaseModel):
 def start(body: StartIn, request: Request, db: Session = Depends(get_db)):
     if body.channel == "voice" and not body.consent_voice:
         raise AppError(422, "CONSENT_REQUIRED", "Voice mode requires explicit consent")
-    cust = Customer(full_name=(body.full_name or "Guest visitor").strip() or "Guest visitor",
-                    email=body.email.lower() if body.email else None, consent_voice=body.consent_voice,
-                    segment="individual", is_fictional=True)
+    cust = Customer(
+        full_name=(body.full_name or "Guest visitor").strip() or "Guest visitor",
+        email=body.email.lower() if body.email else None,
+        consent_voice=body.consent_voice,
+        segment="individual",
+        is_fictional=True,
+    )
     db.add(cust)
     db.flush()
     conv, _, token = orchestrator.start_conversation(db, cust, body.channel)
-    audit.record(db, actor_type="customer", actor_id=str(cust.id), action="conversation.started",
-                 resource_type="conversation", resource_id=conv.id, ip=request.client.host if request.client else None,
-                 details={"channel": body.channel, "consent_voice": body.consent_voice})
+    audit.record(
+        db,
+        actor_type="customer",
+        actor_id=str(cust.id),
+        action="conversation.started",
+        resource_type="conversation",
+        resource_id=conv.id,
+        ip=request.client.host if request.client else None,
+        details={"channel": body.channel, "consent_voice": body.consent_voice},
+    )
     db.commit()
     db.refresh(conv)
     return {"conversation_id": str(conv.id), "access_token": token, "messages": [msg_out(m) for m in conv.messages]}
@@ -81,8 +97,9 @@ class MessageIn(BaseModel):
 
 
 @router.post("/conversations/{conv_id}/messages")
-def post_message(conv_id: uuid.UUID, body: MessageIn, x_conversation_token: str | None = Header(None),
-                 db: Session = Depends(get_db)):
+def post_message(
+    conv_id: uuid.UUID, body: MessageIn, x_conversation_token: str | None = Header(None), db: Session = Depends(get_db)
+):
     conv = _conv(db, conv_id, x_conversation_token)
     before = {m.id for m in conv.messages}
     orchestrator.handle_customer_message(db, conv, body.content)
@@ -96,8 +113,9 @@ class EnrollIn(BaseModel):
 
 
 @router.post("/conversations/{conv_id}/enroll")
-def enroll(conv_id: uuid.UUID, body: EnrollIn, x_conversation_token: str | None = Header(None),
-           db: Session = Depends(get_db)):
+def enroll(
+    conv_id: uuid.UUID, body: EnrollIn, x_conversation_token: str | None = Header(None), db: Session = Depends(get_db)
+):
     conv = _conv(db, conv_id, x_conversation_token)
     ps = orchestrator.request_enrollment(db, conv, body.product_id)
     db.commit()
@@ -107,12 +125,27 @@ def enroll(conv_id: uuid.UUID, body: EnrollIn, x_conversation_token: str | None 
 def _checkout(db: Session, ps: PaymentSession) -> dict:
     tx = ps.transaction
     p = tx.product
-    return {"session_id": str(ps.id), "status": tx.status, "amount": str(ps.amount), "currency": ps.currency,
-            "product": {"id": str(p.id), "slug": p.slug, "name": p.name, "price": str(p.price), "currency": p.currency,
-                        "duration_weeks": p.duration_weeks, "level": p.level},
-            "order_reference": ps.order.reference, "transaction_reference": tx.reference,
-            "test_methods": payments.settings_view()["test_methods"], "simulated": True,
-            "failure_reason": tx.failure_reason, "expires_at": iso(ps.expires_at)}
+    return {
+        "session_id": str(ps.id),
+        "status": tx.status,
+        "amount": str(ps.amount),
+        "currency": ps.currency,
+        "product": {
+            "id": str(p.id),
+            "slug": p.slug,
+            "name": p.name,
+            "price": str(p.price),
+            "currency": p.currency,
+            "duration_weeks": p.duration_weeks,
+            "level": p.level,
+        },
+        "order_reference": ps.order.reference,
+        "transaction_reference": tx.reference,
+        "test_methods": payments.settings_view()["test_methods"],
+        "simulated": True,
+        "failure_reason": tx.failure_reason,
+        "expires_at": iso(ps.expires_at),
+    }
 
 
 @router.get("/checkout/{session_id}")
@@ -129,8 +162,12 @@ class PayIn(BaseModel):
 
 
 @router.post("/checkout/{session_id}/pay")
-def pay(session_id: uuid.UUID, body: PayIn, idempotency_key: str = Header(..., min_length=8, max_length=80),
-        db: Session = Depends(get_db)):
+def pay(
+    session_id: uuid.UUID,
+    body: PayIn,
+    idempotency_key: str = Header(..., min_length=8, max_length=80),
+    db: Session = Depends(get_db),
+):
     ps = db.get(PaymentSession, session_id)
     if not ps:
         raise not_found("Checkout session")
@@ -148,7 +185,10 @@ class FeedbackIn(BaseModel):
 @router.post("/feedback", status_code=201)
 def feedback(body: FeedbackIn, x_conversation_token: str | None = Header(None), db: Session = Depends(get_db)):
     conv = _conv(db, body.conversation_id, x_conversation_token)
-    db.add(CustomerFeedback(customer_id=conv.customer_id, conversation_id=conv.id, rating=body.rating,
-                            comment=body.comment))
+    db.add(
+        CustomerFeedback(
+            customer_id=conv.customer_id, conversation_id=conv.id, rating=body.rating, comment=body.comment
+        )
+    )
     db.commit()
     return {"ok": True}

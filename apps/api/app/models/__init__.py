@@ -163,9 +163,7 @@ class CustomerInsight(UUIDPk, Timestamped, Base):
 
     __tablename__ = "customer_insights"
     customer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"), index=True)
-    conversation_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("conversations.id", ondelete="CASCADE"), unique=True
-    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), unique=True)
     summary: Mapped[str] = mapped_column(Text)
     needs: Mapped[list] = mapped_column(JSON, default=list)
     motivations: Mapped[list] = mapped_column(JSON, default=list)
@@ -505,9 +503,7 @@ class ApprovalRequest(UUIDPk, Timestamped, Base):
     risk_flags: Mapped[list] = mapped_column(JSON, default=list)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     expires_at: Mapped[datetime] = mapped_column(UTCDateTime)
-    decisions: Mapped[list["ApprovalDecision"]] = relationship(
-        order_by="ApprovalDecision.created_at", lazy="selectin"
-    )
+    decisions: Mapped[list["ApprovalDecision"]] = relationship(order_by="ApprovalDecision.created_at", lazy="selectin")
 
 
 class ApprovalDecision(UUIDPk, Timestamped, Base):

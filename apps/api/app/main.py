@@ -28,7 +28,7 @@ app = FastAPI(
     title="The Autonomous FinTech Team API",
     version="1.0.0",
     description="Six specialised agents, one orchestrator, simulated payments, human-in-the-loop controls. "
-                "All data is fictional; no real payment can be triggered.",
+    "All data is fictional; no real payment can be triggered.",
     lifespan=lifespan,
 )
 errors.install(app)

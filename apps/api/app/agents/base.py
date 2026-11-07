@@ -30,7 +30,8 @@ SPECS: dict[str, AgentSpec] = {
     s.id: s
     for s in [
         AgentSpec(
-            "sales", "Voice Sales Agent",
+            "sales",
+            "Voice Sales Agent",
             "Talks with prospects by text or voice, presents offers, answers questions, handles objections "
             "and proposes the next step.",
             "mic",
@@ -42,7 +43,8 @@ SPECS: dict[str, AgentSpec] = {
             ("Present offers", "Answer questions", "Handle objections", "Detect purchase intent", "Propose enrollment"),
         ),
         AgentSpec(
-            "intelligence", "Customer Intelligence Agent",
+            "intelligence",
+            "Customer Intelligence Agent",
             "Turns conversations into structured intelligence: needs, objections, sentiment, purchase intent "
             "and journey stage.",
             "brain",
@@ -51,7 +53,8 @@ SPECS: dict[str, AgentSpec] = {
             ("Extract needs & motivations", "Classify objections", "Score sentiment & intent", "Summarise"),
         ),
         AgentSpec(
-            "payment", "Payment Agent",
+            "payment",
+            "Payment Agent",
             "Creates simulated payment sessions, verifies prices server-side, runs the payment state machine and "
             "reports outcomes. Cannot approve its own held payments.",
             "credit-card",
@@ -60,7 +63,8 @@ SPECS: dict[str, AgentSpec] = {
             ("Create sessions", "Verify prices", "Process simulated payments", "Track statuses", "Safe retries"),
         ),
         AgentSpec(
-            "analyst", "Financial Data Analyst",
+            "analyst",
+            "Financial Data Analyst",
             "Computes revenue, sales, conversion and payment KPIs with deterministic Decimal arithmetic and "
             "explains changes. Never invents figures.",
             "line-chart",
@@ -69,7 +73,8 @@ SPECS: dict[str, AgentSpec] = {
             ("Revenue & sales", "Conversion", "Payment statuses", "Trend detection", "Reports"),
         ),
         AgentSpec(
-            "strategy", "Business Strategy Agent",
+            "strategy",
+            "Business Strategy Agent",
             "Turns intelligence and financial results into evidence-backed recommendations. Can propose, "
             "never execute, price or financial changes.",
             "compass",
@@ -78,14 +83,20 @@ SPECS: dict[str, AgentSpec] = {
             ("Conversion analysis", "Objection analysis", "Pricing experiments", "Script & journey improvements"),
         ),
         AgentSpec(
-            "security", "Security & Fraud Detection Agent",
+            "security",
+            "Security & Fraud Detection Agent",
             "Monitors every sensitive step: prompt injection, payment velocity, duplicates, anomalies and agent "
             "permission violations. Holds risky operations for human approval.",
             "shield",
             frozenset({"security.scan", "security.assess", "security.raise", "approval.request"}),
             "You explain security alerts for analysts in 2 sentences. Never change the decision.",
-            ("Prompt-injection screening", "Fraud rules", "Statistical anomalies", "Permission monitoring",
-             "Human-review requests"),
+            (
+                "Prompt-injection screening",
+                "Fraud rules",
+                "Statistical anomalies",
+                "Permission monitoring",
+                "Human-review requests",
+            ),
         ),
     ]
 }
@@ -154,26 +165,68 @@ def invoke(ctx: AgentContext, tool: str, fn: Callable[..., Any] | None, *args, *
     started = time.perf_counter()
     summary = ", ".join(f"{k}={str(v)[:40]}" for k, v in kwargs.items() if k not in ("db",))[:300]
     if not allowed:
-        ctx.db.add(ToolInvocation(agent_id=ctx.agent_id, execution_id=ctx.execution_id, tool=tool, allowed=False,
-                                  status="DENIED", args_summary=summary, error="not in allowlist"))
-        audit.record(ctx.db, actor_type="agent", actor_id=f"agent:{ctx.agent_id}", action="agent.tool_denied",
-                     resource_type="tool", resource_id=tool, severity="CRITICAL", outcome="DENIED")
+        ctx.db.add(
+            ToolInvocation(
+                agent_id=ctx.agent_id,
+                execution_id=ctx.execution_id,
+                tool=tool,
+                allowed=False,
+                status="DENIED",
+                args_summary=summary,
+                error="not in allowlist",
+            )
+        )
+        audit.record(
+            ctx.db,
+            actor_type="agent",
+            actor_id=f"agent:{ctx.agent_id}",
+            action="agent.tool_denied",
+            resource_type="tool",
+            resource_id=tool,
+            severity="CRITICAL",
+            outcome="DENIED",
+        )
         from app.services import risk  # local import: avoid cycle
 
-        risk.raise_event(ctx.db, event_type="AGENT_PERMISSION_VIOLATION", category="AGENT", severity="HIGH",
-                         description=f"Agent '{ctx.agent_id}' attempted forbidden tool '{tool}'", risk_score=0.8,
-                         recommended_action="INVESTIGATE_AGENT", agent_id=ctx.agent_id,
-                         evidence={"tool": tool, "args": summary}, workflow_id=ctx.workflow_id)
+        risk.raise_event(
+            ctx.db,
+            event_type="AGENT_PERMISSION_VIOLATION",
+            category="AGENT",
+            severity="HIGH",
+            description=f"Agent '{ctx.agent_id}' attempted forbidden tool '{tool}'",
+            risk_score=0.8,
+            recommended_action="INVESTIGATE_AGENT",
+            agent_id=ctx.agent_id,
+            evidence={"tool": tool, "args": summary},
+            workflow_id=ctx.workflow_id,
+        )
         ctx.db.flush()
         raise PermissionViolation(ctx.agent_id, tool)
     try:
         result = fn(*args, **kwargs) if fn else None
     except Exception as e:
-        ctx.db.add(ToolInvocation(agent_id=ctx.agent_id, execution_id=ctx.execution_id, tool=tool, allowed=True,
-                                  status="ERROR", args_summary=summary, error=str(e)[:300],
-                                  duration_ms=int((time.perf_counter() - started) * 1000)))
+        ctx.db.add(
+            ToolInvocation(
+                agent_id=ctx.agent_id,
+                execution_id=ctx.execution_id,
+                tool=tool,
+                allowed=True,
+                status="ERROR",
+                args_summary=summary,
+                error=str(e)[:300],
+                duration_ms=int((time.perf_counter() - started) * 1000),
+            )
+        )
         raise
-    ctx.db.add(ToolInvocation(agent_id=ctx.agent_id, execution_id=ctx.execution_id, tool=tool, allowed=True,
-                              status="OK", args_summary=summary,
-                              duration_ms=int((time.perf_counter() - started) * 1000)))
+    ctx.db.add(
+        ToolInvocation(
+            agent_id=ctx.agent_id,
+            execution_id=ctx.execution_id,
+            tool=tool,
+            allowed=True,
+            status="OK",
+            args_summary=summary,
+            duration_ms=int((time.perf_counter() - started) * 1000),
+        )
+    )
     return result

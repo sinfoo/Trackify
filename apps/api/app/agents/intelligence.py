@@ -14,19 +14,92 @@ OBJECTION_TERMS: dict[str, list[str]] = {
     "price": ["expensive", "price", "cost", "cheaper", "discount", "afford", "budget", "too much", "cher", "prix"],
     "time_constraints": ["no time", "busy", "schedule", "too long", "weeks is", "evening", "weekend", "pas le temps"],
     "trust": ["legit", "trust", "scam", "reviews", "accredited", "recognized", "guarantee", "who teaches"],
-    "missing_information": ["syllabus", "prerequisite", "more details", "what exactly", "how does it work", "curriculum"],
+    "missing_information": [
+        "syllabus",
+        "prerequisite",
+        "more details",
+        "what exactly",
+        "how does it work",
+        "curriculum",
+    ],
     "product_relevance": ["not relevant", "don't need", "not for me", "already know", "not useful"],
-    "technical_difficulty": ["too hard", "difficult", "no experience", "math", "too advanced", "beginner", "never coded"],
+    "technical_difficulty": [
+        "too hard",
+        "difficult",
+        "no experience",
+        "math",
+        "too advanced",
+        "beginner",
+        "never coded",
+    ],
     "payment_concerns": ["installment", "payment plan", "pay later", "secure payment", "refund", "pay in"],
 }
-POSITIVE = ["great", "good", "love", "perfect", "excellent", "interested", "awesome", "nice", "thanks", "helpful",
-            "sounds good", "exactly", "cool", "super", "merci", "parfait", "happy"]
-NEGATIVE = ["bad", "expensive", "worried", "confusing", "not sure", "hate", "disappointed", "annoying", "scam",
-            "difficult", "problem", "no thanks", "unfortunately", "frustrated"]
-PURCHASE = ["enroll", "enrol", "sign me up", "sign up", "register", "buy", "purchase", "i'll take", "i will take",
-            "book a seat", "reserve", "let's do it", "ready to pay", "join the", "m'inscrire", "inscription"]
-INTEREST = ["interested", "tell me more", "sounds good", "i like", "how much", "when does", "what will i learn",
-            "looking for", "i want to learn", "career", "want to become"]
+POSITIVE = [
+    "great",
+    "good",
+    "love",
+    "perfect",
+    "excellent",
+    "interested",
+    "awesome",
+    "nice",
+    "thanks",
+    "helpful",
+    "sounds good",
+    "exactly",
+    "cool",
+    "super",
+    "merci",
+    "parfait",
+    "happy",
+]
+NEGATIVE = [
+    "bad",
+    "expensive",
+    "worried",
+    "confusing",
+    "not sure",
+    "hate",
+    "disappointed",
+    "annoying",
+    "scam",
+    "difficult",
+    "problem",
+    "no thanks",
+    "unfortunately",
+    "frustrated",
+]
+PURCHASE = [
+    "enroll",
+    "enrol",
+    "sign me up",
+    "sign up",
+    "register",
+    "buy",
+    "purchase",
+    "i'll take",
+    "i will take",
+    "book a seat",
+    "reserve",
+    "let's do it",
+    "ready to pay",
+    "join the",
+    "m'inscrire",
+    "inscription",
+]
+INTEREST = [
+    "interested",
+    "tell me more",
+    "sounds good",
+    "i like",
+    "how much",
+    "when does",
+    "what will i learn",
+    "looking for",
+    "i want to learn",
+    "career",
+    "want to become",
+]
 REJECT = ["not interested", "no thanks", "maybe later", "not now", "too expensive for me", "i'll pass", "goodbye"]
 NEEDS = {
     "career_change": ["career", "new job", "switch", "become a", "job market"],
@@ -145,27 +218,44 @@ def analyze(customer_texts: list[str], products: list[Product], converted: bool 
     label = "positive" if sent > 0.2 else "negative" if sent < -0.2 else "neutral"
     sat = [w for w in POSITIVE if w in t][:5]
     top = matched[0][0].name if matched else "an offer"
-    summary = (f"{len(customer_texts)} customer message(s). Interested in {', '.join(interests) or 'general AI training'}"
-               f"{' (' + top + ')' if matched else ''}. "
-               f"{'Objections: ' + ', '.join(objections) + '. ' if objections else ''}"
-               f"Intent {intent:.2f}, sentiment {label}.")
+    summary = (
+        f"{len(customer_texts)} customer message(s). Interested in {', '.join(interests) or 'general AI training'}"
+        f"{' (' + top + ')' if matched else ''}. "
+        f"{'Objections: ' + ', '.join(objections) + '. ' if objections else ''}"
+        f"Intent {intent:.2f}, sentiment {label}."
+    )
     follow = (FOLLOW_UPS.get(objections[0]) if objections else None) or (
-        "Send the enrollment link." if purchase and not converted else
-        "Send onboarding details." if converted else f"Recommend {top} with a short success story.")
+        "Send the enrollment link."
+        if purchase and not converted
+        else "Send onboarding details."
+        if converted
+        else f"Recommend {top} with a short success story."
+    )
     evidence = len(customer_texts) + len(objections) + interest_hits + (2 if purchase else 0)
     return InsightModel(
-        summary=summary, needs=[k for k, v in NEEDS.items() if _hits(t, v)],
-        motivations=[k for k, v in MOTIVATIONS.items() if _hits(t, v)], interests=interests,
-        preferred_product_ids=[str(p.id) for p, _ in matched[:2]], objections=objections, satisfaction_signals=sat,
-        sentiment_score=sent, sentiment_label=label, purchase_intent=intent, hesitation=hesitation,
-        journey_stage=stage, recommended_follow_up=follow, confidence=round(min(0.9, 0.35 + 0.08 * evidence), 2),
+        summary=summary,
+        needs=[k for k, v in NEEDS.items() if _hits(t, v)],
+        motivations=[k for k, v in MOTIVATIONS.items() if _hits(t, v)],
+        interests=interests,
+        preferred_product_ids=[str(p.id) for p, _ in matched[:2]],
+        objections=objections,
+        satisfaction_signals=sat,
+        sentiment_score=sent,
+        sentiment_label=label,
+        purchase_intent=intent,
+        hesitation=hesitation,
+        journey_stage=stage,
+        recommended_follow_up=follow,
+        confidence=round(min(0.9, 0.35 + 0.08 * evidence), 2),
     )
 
 
 def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
     db = ctx.db
     conv = ctx.use("conversation.read", db.get, Conversation, uuid.UUID(payload["conversation_id"]))
-    products = ctx.use("catalog.read", lambda: list(db.scalars(select(Product).where(Product.status == ProductStatus.ACTIVE))))
+    products = ctx.use(
+        "catalog.read", lambda: list(db.scalars(select(Product).where(Product.status == ProductStatus.ACTIVE)))
+    )
     texts = [m.content for m in conv.messages if m.role == "customer" and not m.flagged]
     insight = analyze(texts, products, converted=payload.get("converted", False))
 
@@ -174,8 +264,12 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
         transcript = "\n".join(f"{m.role}: {m.content}" for m in conv.messages if not m.flagged)[-6000:]
         refined, res = llm.complete_json(
             "Summarise this sales conversation for a CRM. Be factual and short.",
-            llm.wrap_untrusted("conversation", transcript), LLMInsight,
-            provider=cfg.provider, model=cfg.model, temperature=cfg.temperature)
+            llm.wrap_untrusted("conversation", transcript),
+            LLMInsight,
+            provider=cfg.provider,
+            model=cfg.model,
+            temperature=cfg.temperature,
+        )
         insight.summary, insight.recommended_follow_up = refined.summary, refined.recommended_follow_up
         insight.needs = sorted(set(insight.needs) | {n[:40] for n in refined.needs})
         insight.motivations = sorted(set(insight.motivations) | {m[:40] for m in refined.motivations})
@@ -201,5 +295,7 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
 
     ctx.use("insight.write", _write)
     out = insight.model_dump()
-    return (f"intent {insight.purchase_intent:.2f} · {insight.sentiment_label} · "
-            f"objections: {', '.join(insight.objections) or 'none'}"), out
+    return (
+        f"intent {insight.purchase_intent:.2f} · {insight.sentiment_label} · "
+        f"objections: {', '.join(insight.objections) or 'none'}"
+    ), out

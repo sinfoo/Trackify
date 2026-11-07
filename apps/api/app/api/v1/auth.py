@@ -41,10 +41,18 @@ def _limited(key: str) -> bool:
 def _set_cookies(resp: Response, db: Session, user: User, family: uuid.UUID | None = None) -> None:
     s = get_settings()
     raw = new_secret()
-    db.add(RefreshToken(user_id=user.id, token_hash=sha256(raw), family_id=family or uuid.uuid4(),
-                        expires_at=utcnow() + timedelta(days=s.refresh_token_days)))
+    db.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=sha256(raw),
+            family_id=family or uuid.uuid4(),
+            expires_at=utcnow() + timedelta(days=s.refresh_token_days),
+        )
+    )
     common = {"httponly": True, "samesite": "lax", "secure": s.cookie_secure}
-    resp.set_cookie(ACCESS_COOKIE, create_access_token(user.id), max_age=s.access_token_minutes * 60, path="/", **common)
+    resp.set_cookie(
+        ACCESS_COOKIE, create_access_token(user.id), max_age=s.access_token_minutes * 60, path="/", **common
+    )
     resp.set_cookie(REFRESH_COOKIE, raw, max_age=s.refresh_token_days * 86400, path="/api/v1/auth", **common)
 
 
@@ -57,20 +65,40 @@ class LoginIn(BaseModel):
 def login(body: LoginIn, request: Request, response: Response, db: Session = Depends(get_db)):
     key = _rate_key(request, body.email)
     if _limited(key):
-        audit.record(db, actor_type="user", actor_id=body.email, action="auth.login_rate_limited",
-                     severity="WARN", outcome="DENIED", ip=client_ip(request))
+        audit.record(
+            db,
+            actor_type="user",
+            actor_id=body.email,
+            action="auth.login_rate_limited",
+            severity="WARN",
+            outcome="DENIED",
+            ip=client_ip(request),
+        )
         db.commit()
         raise AppError(429, "RATE_LIMITED", "Too many failed attempts. Try again in a few minutes.")
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if not user or not user.is_active or not verify_password(body.password, user.password_hash):
         _failures[key].append(time.monotonic())
-        audit.record(db, actor_type="user", actor_id=body.email, action="auth.login_failed", severity="WARN",
-                     outcome="FAILED", ip=client_ip(request))
+        audit.record(
+            db,
+            actor_type="user",
+            actor_id=body.email,
+            action="auth.login_failed",
+            severity="WARN",
+            outcome="FAILED",
+            ip=client_ip(request),
+        )
         if len(_failures[key]) == get_settings().login_max_attempts:
-            risk.raise_event(db, event_type="BRUTE_FORCE_SUSPECTED", category="ACCESS", severity="HIGH",
-                             description=f"{len(_failures[key])} failed logins for {body.email}",
-                             risk_score=0.75, recommended_action="LOCK_AND_REVIEW",
-                             evidence={"ip": client_ip(request), "email": body.email})
+            risk.raise_event(
+                db,
+                event_type="BRUTE_FORCE_SUSPECTED",
+                category="ACCESS",
+                severity="HIGH",
+                description=f"{len(_failures[key])} failed logins for {body.email}",
+                risk_score=0.75,
+                recommended_action="LOCK_AND_REVIEW",
+                evidence={"ip": client_ip(request), "email": body.email},
+            )
         db.commit()
         raise AppError(401, "INVALID_CREDENTIALS", "Invalid email or password")
     _failures.pop(key, None)
@@ -90,8 +118,15 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     if rt.revoked_at:  # reuse of a rotated token: revoke the whole family
         for t in db.scalars(select(RefreshToken).where(RefreshToken.family_id == rt.family_id)):
             t.revoked_at = t.revoked_at or utcnow()
-        audit.record(db, actor_type="user", actor_id=str(rt.user_id), action="auth.refresh_reuse_detected",
-                     severity="CRITICAL", outcome="DENIED", ip=client_ip(request))
+        audit.record(
+            db,
+            actor_type="user",
+            actor_id=str(rt.user_id),
+            action="auth.refresh_reuse_detected",
+            severity="CRITICAL",
+            outcome="DENIED",
+            ip=client_ip(request),
+        )
         db.commit()
         raise AppError(401, "UNAUTHENTICATED", "Session revoked")
     rt.revoked_at = utcnow()
@@ -132,8 +167,12 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
     if db.scalar(select(User).where(User.email == body.email.lower())):
         raise AppError(409, "EMAIL_TAKEN", "An account with this email already exists")
     viewer = db.scalar(select(Role).where(Role.name == "VIEWER"))
-    u = User(email=body.email.lower(), full_name=body.full_name, password_hash=hash_password(body.password),
-             roles=[viewer] if viewer else [])
+    u = User(
+        email=body.email.lower(),
+        full_name=body.full_name,
+        password_hash=hash_password(body.password),
+        roles=[viewer] if viewer else [],
+    )
     db.add(u)
     db.flush()
     audit.record(db, actor_type="user", actor_id=u.email, action="auth.register", ip=client_ip(request))
@@ -171,7 +210,9 @@ def reset(body: ResetIn, request: Request, db: Session = Depends(get_db)):
     user = db.get(User, t.user_id)
     user.password_hash = hash_password(body.password)
     t.used_at = utcnow()
-    for rt in db.scalars(select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))):
+    for rt in db.scalars(
+        select(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+    ):
         rt.revoked_at = utcnow()
     audit.record(db, actor_type="user", actor_id=user.email, action="auth.password_reset", ip=client_ip(request))
     db.commit()

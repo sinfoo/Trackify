@@ -25,3 +25,14 @@ dev = [
     "pytest-asyncio>=1.4.1.post1",
     "ruff>=0.17.4",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+ignore = ["B008", "E501"]  # Depends() is the FastAPI idiom; ruff format owns line length (long literals allowed)
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"

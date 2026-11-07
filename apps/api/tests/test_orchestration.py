@@ -1,0 +1,132 @@
+"""End-to-end customer journey through the public API and the orchestrator."""
+
+import uuid
+
+import pytest
+from conftest import checkout, product
+from sqlalchemy import func, select
+
+from app.models import (
+    AgentExecution,
+    AgentMessage,
+    Enrollment,
+    EnrollmentStatus,
+    Order,
+    OrderStatus,
+    Transaction,
+    TxStatus,
+    Workflow,
+    WorkflowState,
+)
+from app.orchestration import orchestrator
+
+SIX = {"sales", "intelligence", "security", "payment", "analyst", "strategy"}
+
+
+def _start(client):
+    r = client.post(
+        "/api/v1/public/conversations", json={"full_name": "Sami Journey", "consent_voice": False, "channel": "text"}
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["messages"][0]["role"] == "agent"  # greeting
+    return body["conversation_id"], {"X-Conversation-Token": body["access_token"]}
+
+
+def _say(client, conv_id, h, text):
+    r = client.post(f"/api/v1/public/conversations/{conv_id}/messages", json={"content": text}, headers=h)
+    assert r.status_code == 200, r.text
+    return r.json()["messages"]
+
+
+def _enroll_and_pay(client, db, conv_id, h, method, slug="genai-llm"):
+    pid = str(product(db, slug).id)
+    db.rollback()
+    r = client.post(f"/api/v1/public/conversations/{conv_id}/enroll", json={"product_id": pid}, headers=h)
+    assert r.status_code == 200, r.text
+    sid = r.json()["checkout_session_id"]
+    r = client.post(
+        f"/api/v1/public/checkout/{sid}/pay",
+        json={"payment_method": method},
+        headers={"Idempotency-Key": uuid.uuid4().hex},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_full_public_journey_completes_with_all_six_agents(client, db):
+    conv_id, h = _start(client)
+    _say(client, conv_id, h, "Hello, I want to learn generative AI and LLM apps for my job.")
+    reply = _say(client, conv_id, h, "Sounds great, I want to enroll.")[-1]
+    assert reply["meta"]["cta"]["type"] == "enroll"
+    res = _enroll_and_pay(client, db, conv_id, h, "sim_card_success")
+    assert res["status"] == "SUCCEEDED"
+
+    db.expire_all()
+    wf = db.scalar(select(Workflow).where(Workflow.conversation_id == uuid.UUID(conv_id)))
+    assert wf.state == WorkflowState.COMPLETED
+    ran = set(
+        db.scalars(
+            select(AgentExecution.agent_id).where(
+                AgentExecution.workflow_id == wf.id, AgentExecution.status == "SUCCEEDED"
+            )
+        )
+    )
+    assert ran == SIX
+    pairs = set(
+        db.execute(
+            select(AgentMessage.from_agent, AgentMessage.to_agent).where(AgentMessage.workflow_id == wf.id)
+        ).all()
+    )
+    assert {
+        ("orchestrator", "security"),
+        ("security", "payment"),
+        ("analyst", "strategy"),
+        ("sales", "intelligence"),
+    } <= {tuple(p) for p in pairs}
+    tx = db.get(Transaction, wf.transaction_id)
+    assert tx.status == TxStatus.SUCCEEDED
+    assert db.get(Order, tx.order_id).status == OrderStatus.PAID
+    assert db.scalar(select(Enrollment.status).where(Enrollment.order_id == tx.order_id)) == EnrollmentStatus.ACTIVE
+
+
+def test_failed_payment_moves_workflow_to_payment_failed(client, db):
+    conv_id, h = _start(client)
+    _say(client, conv_id, h, "Hi, I'm interested in data science and analytics.")
+    res = _enroll_and_pay(client, db, conv_id, h, "sim_card_declined", "data-science")
+    assert res["status"] == "FAILED"
+    db.expire_all()
+    wf = db.scalar(select(Workflow).where(Workflow.conversation_id == uuid.UUID(conv_id)))
+    assert wf.state == WorkflowState.PAYMENT_FAILED
+    tx = db.get(Transaction, wf.transaction_id)
+    assert tx.status == TxStatus.FAILED and tx.failure_reason == "card_declined"
+    assert db.scalar(select(Enrollment.status).where(Enrollment.order_id == tx.order_id)) == EnrollmentStatus.PENDING
+
+
+def test_agent_failure_records_failed_execution(db):
+    _, wf, _ = checkout(db)
+    n = db.scalar(select(func.count(AgentExecution.id)))
+    with pytest.raises(ValueError):
+        orchestrator.execute(
+            db,
+            "payment",
+            {"task": "nope", "transaction_id": str(wf.transaction_id)},
+            wf=wf,
+            task_type="bogus",
+            triggered_by="test",
+        )
+    ex = db.scalar(select(AgentExecution).where(AgentExecution.task_type == "bogus"))
+    assert ex.status == "FAILED" and ex.attempts == 2  # transient errors retried once
+    assert db.scalar(select(func.count(AgentExecution.id))) == n + 1
+
+
+def test_customer_can_keep_chatting_while_payment_is_held(client, db):
+    conv_id, h = _start(client)
+    res = _enroll_and_pay(client, db, conv_id, h, "sim_card_success", "ai-leadership")
+    assert res["status"] == "REQUIRES_APPROVAL"
+    r = client.post(
+        f"/api/v1/public/conversations/{conv_id}/messages",
+        json={"content": "How long will the review take?"},
+        headers=h,
+    )
+    assert r.status_code == 200, r.text

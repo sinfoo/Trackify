@@ -52,7 +52,9 @@ def _anthropic(system: str, messages: list[dict], model: str, max_tokens: int) -
     import anthropic
 
     s = get_settings()
-    client = anthropic.Anthropic(api_key=s.anthropic_api_key, timeout=s.llm_timeout_seconds, max_retries=s.llm_max_retries)
+    client = anthropic.Anthropic(
+        api_key=s.anthropic_api_key, timeout=s.llm_timeout_seconds, max_retries=s.llm_max_retries
+    )
     try:
         resp = client.beta.messages.create(
             model=model,

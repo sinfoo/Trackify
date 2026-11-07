@@ -52,8 +52,16 @@ TEST_METHODS: dict[str, dict] = {
     "sim_card_success": {"label": "Test card · always succeeds", "outcome": "SUCCEEDED"},
     "sim_wallet_success": {"label": "Test e-wallet · always succeeds", "outcome": "SUCCEEDED"},
     "sim_card_declined": {"label": "Test card · declined", "outcome": "FAILED", "reason": "card_declined"},
-    "sim_insufficient_funds": {"label": "Test card · insufficient funds", "outcome": "FAILED", "reason": "insufficient_funds"},
-    "sim_provider_error": {"label": "Test card · provider error", "outcome": "FAILED", "reason": "provider_unavailable"},
+    "sim_insufficient_funds": {
+        "label": "Test card · insufficient funds",
+        "outcome": "FAILED",
+        "reason": "insufficient_funds",
+    },
+    "sim_provider_error": {
+        "label": "Test card · provider error",
+        "outcome": "FAILED",
+        "reason": "provider_unavailable",
+    },
 }
 
 
@@ -71,28 +79,53 @@ def transition(db: Session, tx: Transaction, to: TxStatus, actor: str, reason: s
     if to not in TRANSITIONS[frm]:
         raise InvalidTransition(frm, to)
     if (frm, to) in HUMAN_ONLY and not actor.startswith("user:"):
-        audit.record(db, actor_type="agent", actor_id=actor, action="payment.transition_denied",
-                     resource_type="transaction", resource_id=tx.id, severity="CRITICAL", outcome="DENIED",
-                     details={"from": frm, "to": to})
+        audit.record(
+            db,
+            actor_type="agent",
+            actor_id=actor,
+            action="payment.transition_denied",
+            resource_type="transaction",
+            resource_id=tx.id,
+            severity="CRITICAL",
+            outcome="DENIED",
+            details={"from": frm, "to": to},
+        )
         raise InvalidTransition(frm, to, "requires human approval")
     tx.status = to
     if to in (S.SUCCEEDED, S.FAILED, S.CANCELLED, S.REFUNDED):
         tx.completed_at = utcnow()
-    db.add(TransactionStatusChange(transaction_id=tx.id, from_status=frm, to_status=to, actor=actor, reason=reason[:300]))
+    db.add(
+        TransactionStatusChange(transaction_id=tx.id, from_status=frm, to_status=to, actor=actor, reason=reason[:300])
+    )
     actor_type = "user" if actor.startswith("user:") else "agent"
-    audit.record(db, actor_type=actor_type, actor_id=actor, action="payment.status_changed",
-                 resource_type="transaction", resource_id=tx.id, details={"from": frm, "to": to, "reason": reason})
-    events.publish(db, "payment.updated", f"{tx.reference}: {frm} → {to}", agent_id="payment",
-                   data={"transaction_id": str(tx.id), "from": frm, "to": to, "reference": tx.reference})
+    audit.record(
+        db,
+        actor_type=actor_type,
+        actor_id=actor,
+        action="payment.status_changed",
+        resource_type="transaction",
+        resource_id=tx.id,
+        details={"from": frm, "to": to, "reason": reason},
+    )
+    events.publish(
+        db,
+        "payment.updated",
+        f"{tx.reference}: {frm} → {to}",
+        agent_id="payment",
+        data={"transaction_id": str(tx.id), "from": frm, "to": to, "reference": tx.reference},
+    )
     db.flush()
 
 
 def seats_taken(db: Session, product_id) -> int:
-    return db.scalar(
-        select(func.count(Enrollment.id)).where(
-            Enrollment.product_id == product_id, Enrollment.status == EnrollmentStatus.ACTIVE
+    return (
+        db.scalar(
+            select(func.count(Enrollment.id)).where(
+                Enrollment.product_id == product_id, Enrollment.status == EnrollmentStatus.ACTIVE
+            )
         )
-    ) or 0
+        or 0
+    )
 
 
 def create_order(db: Session, customer: Customer, product: Product, conversation_id=None) -> tuple[Order, Enrollment]:
@@ -101,8 +134,13 @@ def create_order(db: Session, customer: Customer, product: Product, conversation
     taken = seats_taken(db, product.id)
     if taken >= product.seats_total:
         raise conflict("SOLD_OUT", "No seats left for this offer")
-    order = Order(reference=_ref("ORD", 6), customer_id=customer.id, conversation_id=conversation_id,
-                  total=product.price, currency=product.currency)
+    order = Order(
+        reference=_ref("ORD", 6),
+        customer_id=customer.id,
+        conversation_id=conversation_id,
+        total=product.price,
+        currency=product.currency,
+    )
     order.items.append(OrderItem(product_id=product.id, quantity=1, unit_price=product.price))
     db.add(order)
     db.flush()
@@ -125,19 +163,40 @@ def create_session(db: Session, order: Order, idempotency_key: str, actor: str =
     if amount != order.total:
         raise conflict("PRICE_MISMATCH", "Order total no longer matches catalog price")
     product = order.items[0].product
-    ps = PaymentSession(order_id=order.id, idempotency_key=idempotency_key, amount=amount,
-                        currency=order.currency, expires_at=utcnow() + timedelta(hours=1))
+    ps = PaymentSession(
+        order_id=order.id,
+        idempotency_key=idempotency_key,
+        amount=amount,
+        currency=order.currency,
+        expires_at=utcnow() + timedelta(hours=1),
+    )
     db.add(ps)
     db.flush()
-    tx = Transaction(reference=_ref("TXN"), session_id=ps.id, order_id=order.id, customer_id=order.customer_id,
-                     product_id=product.id, amount=amount, currency=order.currency, status=S.CREATED)
+    tx = Transaction(
+        reference=_ref("TXN"),
+        session_id=ps.id,
+        order_id=order.id,
+        customer_id=order.customer_id,
+        product_id=product.id,
+        amount=amount,
+        currency=order.currency,
+        status=S.CREATED,
+    )
     db.add(tx)
     db.flush()
-    db.add(TransactionStatusChange(transaction_id=tx.id, from_status=None, to_status=S.CREATED, actor=actor,
-                                   reason="session created"))
+    db.add(
+        TransactionStatusChange(
+            transaction_id=tx.id, from_status=None, to_status=S.CREATED, actor=actor, reason="session created"
+        )
+    )
     transition(db, tx, S.PENDING, actor, "awaiting customer payment")
-    events.publish(db, "payment.created", f"Payment session {tx.reference} for {amount} {order.currency}",
-                   agent_id="payment", data={"transaction_id": str(tx.id), "session_id": str(ps.id)})
+    events.publish(
+        db,
+        "payment.created",
+        f"Payment session {tx.reference} for {amount} {order.currency}",
+        agent_id="payment",
+        data={"transaction_id": str(tx.id), "session_id": str(ps.id)},
+    )
     db.refresh(ps)
     return ps
 
@@ -146,16 +205,32 @@ def find_attempt(db: Session, key: str) -> PaymentAttempt | None:
     return db.scalar(select(PaymentAttempt).where(PaymentAttempt.idempotency_key == key))
 
 
-def record_attempt(db: Session, tx: Transaction, method: str, key: str, outcome: str, reason: str | None = None) -> PaymentAttempt:
-    a = PaymentAttempt(transaction_id=tx.id, customer_id=tx.customer_id, idempotency_key=key, payment_method=method,
-                       amount=tx.amount, outcome=outcome, failure_reason=reason,
-                       provider_reference=_ref("SIM", 10) if outcome in ("SUCCEEDED", "FAILED") else None)
+def record_attempt(
+    db: Session, tx: Transaction, method: str, key: str, outcome: str, reason: str | None = None
+) -> PaymentAttempt:
+    a = PaymentAttempt(
+        transaction_id=tx.id,
+        customer_id=tx.customer_id,
+        idempotency_key=key,
+        payment_method=method,
+        amount=tx.amount,
+        outcome=outcome,
+        failure_reason=reason,
+        provider_reference=_ref("SIM", 10) if outcome in ("SUCCEEDED", "FAILED") else None,
+    )
     db.add(a)
     db.flush()
-    audit.record(db, actor_type="agent", actor_id="agent:payment", action="payment.attempt",
-                 resource_type="transaction", resource_id=tx.id,
-                 severity="INFO" if outcome == "SUCCEEDED" else "WARN",
-                 outcome=outcome, details={"method": method, "reason": reason})
+    audit.record(
+        db,
+        actor_type="agent",
+        actor_id="agent:payment",
+        action="payment.attempt",
+        resource_type="transaction",
+        resource_id=tx.id,
+        severity="INFO" if outcome == "SUCCEEDED" else "WARN",
+        outcome=outcome,
+        details={"method": method, "reason": reason},
+    )
     return a
 
 

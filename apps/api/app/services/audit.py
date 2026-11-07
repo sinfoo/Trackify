@@ -50,8 +50,16 @@ def record(
         prev_hash=prev,
     )
     body = json.dumps(
-        [entry.actor_type, entry.actor_id, entry.action, entry.resource_type, entry.resource_id,
-         entry.outcome, entry.details, prev],
+        [
+            entry.actor_type,
+            entry.actor_id,
+            entry.action,
+            entry.resource_type,
+            entry.resource_id,
+            entry.outcome,
+            entry.details,
+            prev,
+        ],
         sort_keys=True,
         default=str,
     )
