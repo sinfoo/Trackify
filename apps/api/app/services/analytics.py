@@ -76,6 +76,14 @@ def _range(q: Select, col, f: Filters) -> Select:
     return q
 
 
+def _cust(q: Select, model, f: Filters) -> Select:
+    """Date range + customer segment for any table with created_at and customer_id."""
+    q = _range(q, model.created_at, f)
+    if f.segment:
+        q = q.where(model.customer_id.in_(select(Customer.id).where(Customer.segment == f.segment)))
+    return q
+
+
 def _tx(q: Select, f: Filters) -> Select:
     q = _range(q, Transaction.created_at, f)
     if f.product_id:
@@ -110,7 +118,7 @@ def overview(db: Session, f: Filters) -> dict:
     talking = set(db.scalars(_conv(select(Conversation.customer_id).distinct(), f)))
 
     intent_q = select(CustomerInsight.customer_id).where(CustomerInsight.purchase_intent >= 0.5)
-    intent_q = _range(intent_q, CustomerInsight.created_at, f)
+    intent_q = _cust(intent_q, CustomerInsight, f)
     order_q = _range(select(Order.customer_id), Order.created_at, f)
     interested = set(db.scalars(intent_q)) | set(db.scalars(order_q))
     if f.segment:
@@ -133,15 +141,13 @@ def overview(db: Session, f: Filters) -> dict:
     succ = counts["SUCCEEDED"]
     avg = (rev / succ).quantize(Decimal("0.001")) if succ else Decimal("0.000")
 
-    enr_q = _range(select(func.count(Enrollment.id)), Enrollment.created_at, f).where(
-        Enrollment.status == EnrollmentStatus.ACTIVE
-    )
+    enr_q = _cust(select(func.count(Enrollment.id)), Enrollment, f).where(Enrollment.status == EnrollmentStatus.ACTIVE)
     if f.product_id:
         enr_q = enr_q.where(Enrollment.product_id == f.product_id)
     enrollments = db.scalar(enr_q) or 0
 
-    sat = db.scalar(_range(select(func.avg(CustomerFeedback.rating)), CustomerFeedback.created_at, f))
-    fb_n = db.scalar(_range(select(func.count(CustomerFeedback.id)), CustomerFeedback.created_at, f)) or 0
+    sat = db.scalar(_cust(select(func.avg(CustomerFeedback.rating)), CustomerFeedback, f))
+    fb_n = db.scalar(_cust(select(func.count(CustomerFeedback.id)), CustomerFeedback, f)) or 0
 
     sec_total = db.scalar(_range(select(func.count(SecurityEvent.id)), SecurityEvent.created_at, f)) or 0
     sec_high = (
@@ -263,28 +269,28 @@ def products(db: Session, f: Filters) -> list[dict]:
 
 def objections(db: Session, f: Filters) -> list[dict]:
     c: Counter = Counter()
-    for objs in db.scalars(_range(select(CustomerInsight.objections), CustomerInsight.created_at, f)):
+    for objs in db.scalars(_cust(select(CustomerInsight.objections), CustomerInsight, f)):
         c.update(set(objs or []))
     total = sum(c.values()) or 1
     return [{"objection": k, "count": n, "share": round(100 * n / total, 1)} for k, n in c.most_common()]
 
 
 def sentiment(db: Session, f: Filters) -> dict:
-    rows = db.scalars(_range(select(CustomerInsight.sentiment_label), CustomerInsight.created_at, f))
+    rows = db.scalars(_cust(select(CustomerInsight.sentiment_label), CustomerInsight, f))
     c = Counter(rows)
     return {k: c.get(k, 0) for k in ("positive", "neutral", "negative")}
 
 
 def interests(db: Session, f: Filters) -> list[dict]:
     c: Counter = Counter()
-    for i in db.scalars(_range(select(CustomerInsight.interests), CustomerInsight.created_at, f)):
+    for i in db.scalars(_cust(select(CustomerInsight.interests), CustomerInsight, f)):
         c.update(set(i or []))
     return [{"interest": k, "count": n} for k, n in c.most_common()]
 
 
 def intent_distribution(db: Session, f: Filters) -> list[dict]:
     bands = {"low (<0.3)": 0, "medium (0.3–0.6)": 0, "high (≥0.6)": 0}
-    for v in db.scalars(_range(select(CustomerInsight.purchase_intent), CustomerInsight.created_at, f)):
+    for v in db.scalars(_cust(select(CustomerInsight.purchase_intent), CustomerInsight, f)):
         bands["low (<0.3)" if v < 0.3 else "medium (0.3–0.6)" if v < 0.6 else "high (≥0.6)"] += 1
     return [{"band": k, "count": n} for k, n in bands.items()]
 

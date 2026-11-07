@@ -39,6 +39,17 @@ def test_overview_matches_db_after_seed_activity(db):
 
     assert audit.verify_chain(db) == (True, None)  # shift_since rewrites created_at, which is not hashed
 
+    # Segment filter must narrow every customer-scoped metric (regression: enrollments/insights ignored it).
+    from app.models import Customer, CustomerInsight, Enrollment, EnrollmentStatus
+
+    seg_ids = set(db.scalars(select(Customer.id).where(Customer.segment == "student")))
+    fs = analytics.Filters(segment="student")
+    so = analytics.overview(db, fs)
+    active = db.scalars(select(Enrollment).where(Enrollment.status == EnrollmentStatus.ACTIVE)).all()
+    assert so["enrollments"] == sum(1 for e in active if e.customer_id in seg_ids)
+    labels = [i.sentiment_label for i in db.scalars(select(CustomerInsight)) if i.customer_id in seg_ids]
+    assert sum(analytics.sentiment(db, fs).values()) == len(labels)
+
 
 def test_money_round_trip_is_exact(db):
     p = Product(
