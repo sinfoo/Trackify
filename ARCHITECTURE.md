@@ -186,3 +186,19 @@ payments:{...}, voice:{stt:"browser",tts:"browser"}, environment}` (never keys).
 | security@demo.techx | SECURITY_ANALYST |
 | sales@demo.techx | SALES_MANAGER |
 | viewer@demo.techx | VIEWER |
+
+## Implemented deviations from the contract above
+
+- Bare arrays (not paged): `GET /products`, `/roles`, `/permissions`, `/customers/{id}/insights`,
+  `/conversations/{id}/insights`. `POST /strategy/generate` returns `{items,total}`.
+- Admin `POST /payments/sessions` and `/simulate` require `orders:write` (there is no `payments:write`).
+- `GET /approvals/{id}` keeps short `customer`/`transaction` at top level and adds full records under `context`.
+  Approval status for "request information" is `INFO_REQUESTED`.
+- `GET /orders/{id}` timeline entries: `{type,status,from_status,actor,note,created_at}`.
+- `Idempotency-Key` must be 8–80 characters. `failure_reason` values are codes (`card_declined`, ...).
+- `Insight.hesitation` is a boolean. Audit logs also return `prev_hash`.
+- `/security/overview` -> `{total,by_severity,by_status,by_category,recent}`; `/security/analyze` -> `{detected,score,patterns,verdict}`.
+- `/analytics/payments` -> `{counts,revenue,refunded,currency,avg_transaction_value,pending_payments,series}`;
+  `/analytics/snapshots/latest` may be `null`. Percentages (`conversion_rate`, `share`) are 0–100.
+- `POST /agents/security/execute {task_type:"explain"}` needs `security:write`; other manual runs need `agents:write`.
+- `POST /workflows/{id}/execute` is not implemented: workflows advance through customer and approval events.
