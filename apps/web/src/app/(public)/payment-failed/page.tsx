@@ -1,13 +1,15 @@
-import { CircleX } from "lucide-react";
-import { EmptyState, PageHeader } from "@/components/ui-kit";
+import { PaymentFailedView } from "@/features/checkout/outcomes";
 
-export const metadata = { title: "Payment failed" };
+export const metadata = { title: "Payment not completed" };
 
-export default function Page() {
+type SP = Promise<Record<string, string | string[] | undefined>>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+export default async function Page({ searchParams }: { searchParams: SP }) {
+  const sp = await searchParams;
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6">
-      <PageHeader title="Payment failed" description="The simulated payment did not go through." />
-      <EmptyState icon={CircleX} title="This page is being built" description="Content will appear here." />
+    <div className="px-4 py-10 md:px-6">
+      <PaymentFailedView session={one(sp.session)} reason={one(sp.reason)?.slice(0, 300)} />
     </div>
   );
 }

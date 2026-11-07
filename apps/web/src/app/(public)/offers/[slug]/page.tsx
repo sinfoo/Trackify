@@ -1,13 +1,12 @@
-import { GraduationCap } from "lucide-react";
-import { EmptyState, PageHeader } from "@/components/ui-kit";
+import { OfferDetail } from "@/features/public/offers";
 
-export const metadata = { title: "Offer" };
+export const metadata = { title: "Program" };
 
-export default function Page() {
+export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6">
-      <PageHeader title="Offer" description="Program details, outcomes and seats left." />
-      <EmptyState icon={GraduationCap} title="This page is being built" description="Content will appear here." />
+      <OfferDetail slug={slug} />
     </div>
   );
 }

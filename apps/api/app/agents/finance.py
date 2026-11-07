@@ -55,6 +55,7 @@ def payment_run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
         if decision == "HOLD":
             payments.record_attempt(db, tx, method, key, "HELD", "held for human review")
             tx.payment_method = method
+            tx.failure_reason = None  # a hold is not a decline; clear any earlier reason
             ctx.use(
                 "payment.process",
                 payments.transition,

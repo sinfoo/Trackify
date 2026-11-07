@@ -1,13 +1,15 @@
-import { CircleCheck } from "lucide-react";
-import { EmptyState, PageHeader } from "@/components/ui-kit";
+import { SuccessView } from "@/features/checkout/outcomes";
 
-export const metadata = { title: "Payment confirmed" };
+export const metadata = { title: "Enrollment confirmed" };
 
-export default function Page() {
+type SP = Promise<Record<string, string | string[] | undefined>>;
+const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+export default async function Page({ searchParams }: { searchParams: SP }) {
+  const ref = one((await searchParams).ref);
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6">
-      <PageHeader title="Payment confirmed" description="Your enrollment is confirmed." />
-      <EmptyState icon={CircleCheck} title="This page is being built" description="Content will appear here." />
+    <div className="px-4 py-10 md:px-6">
+      <SuccessView reference={ref} />
     </div>
   );
 }

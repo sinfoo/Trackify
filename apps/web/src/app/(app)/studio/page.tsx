@@ -1,13 +1,16 @@
-import { Sparkles } from "lucide-react";
-import { EmptyState, PageHeader } from "@/components/ui-kit";
+import { PageHeader } from "@/components/ui-kit";
+import { Studio } from "@/features/studio/studio";
 
-export const metadata = { title: "Studio" };
+export const metadata = { title: "Conversation Studio" };
 
 export default function Page() {
   return (
     <>
-      <PageHeader title="Studio" description="Conversations with prospects and the insights agents extracted." />
-      <EmptyState icon={Sparkles} title="This view is being built" description="Data for this page will appear here." />
+      <PageHeader
+        title="Conversation Studio"
+        description="Play the customer on the left. On the right, watch the agents screen, answer, analyse and charge in real time."
+      />
+      <Studio />
     </>
   );
 }

@@ -213,7 +213,7 @@ function LiveIndicator() {
   );
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
   return (
     <Button

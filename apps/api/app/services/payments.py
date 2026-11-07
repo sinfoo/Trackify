@@ -30,6 +30,7 @@ from app.models import (
     Transaction,
     TransactionStatusChange,
     TxStatus,
+    Workflow,
 )
 from app.services import audit, events
 
@@ -112,6 +113,7 @@ def transition(db: Session, tx: Transaction, to: TxStatus, actor: str, reason: s
         "payment.updated",
         f"{tx.reference}: {frm} → {to}",
         agent_id="payment",
+        workflow_id=db.scalar(select(Workflow.id).where(Workflow.transaction_id == tx.id)),
         data={"transaction_id": str(tx.id), "from": frm, "to": to, "reference": tx.reference},
     )
     db.flush()
