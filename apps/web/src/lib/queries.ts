@@ -15,8 +15,10 @@ export const qk = {
   security: ["security"] as const,
   approvals: ["approvals"] as const,
   customers: ["customers"] as const,
+  products: ["products"] as const,
   conversations: ["conversations"] as const,
   events: ["events"] as const,
+  strategy: ["strategy"] as const,
 };
 
 export function useMe() {
