@@ -32,6 +32,15 @@ import { Panel } from "@/features/analytics/panel";
 import { confidencePct, useRecommendations } from "@/features/strategy/strategy-view";
 
 const label = (s: string) => humanize(String(s ?? "").toUpperCase());
+// Short names so the bar list (10rem label column) never truncates on a projector.
+const SHORT_EVENT: Record<string, string> = {
+  AGENT_PERMISSION_VIOLATION: "Permission violation",
+  HIGH_VALUE_TRANSACTION: "High value payment",
+  POTENTIAL_DUPLICATE_TRANSACTION: "Possible duplicate",
+  PROMPT_INJECTION_ATTEMPT: "Prompt injection",
+  REPEATED_FAILED_PAYMENTS: "Repeated failures",
+  SUSPICIOUS_PAYMENT_PATTERN: "Payment velocity",
+};
 
 const SIX = ["sales", "intelligence", "payment", "analyst", "strategy", "security"];
 
@@ -436,7 +445,7 @@ function TrustAndOutlook() {
       >
         <BarList
           color="var(--chart-4)"
-          items={types.map(([k, v]) => ({ key: k, label: label(k), value: v }))}
+          items={types.map(([k, v]) => ({ key: k, label: SHORT_EVENT[k] ?? label(k), value: v }))}
           empty="No suspicious events"
         />
       </Panel>
@@ -453,7 +462,7 @@ function TrustAndOutlook() {
               <span className="text-sm text-muted-foreground"> / 5 average</span>
             </p>
             <BarList
-              items={["5", "4", "3", "2", "1"].map((r) => ({ key: r, label: `${r} stars`, value: fb.data.distribution[r] ?? 0 }))}
+              items={["5", "4", "3", "2", "1"].map((r) => ({ key: r, label: r === "1" ? "1 star" : `${r} stars`, value: fb.data.distribution[r] ?? 0 }))}
             />
             {fb.data.themes.length > 0 && (
               <p className="text-xs text-muted-foreground">

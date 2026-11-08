@@ -20,6 +20,11 @@ export function ExecutionList({ items, showAgent = false, showWorkflow = true }:
               <StatusBadge status={x.status} />
               <span className="num text-sm font-medium">{x.task_type}</span>
               <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">{x.output_summary ?? x.error ?? ""}</span>
+              {x.provider && (
+                <span className="num rounded-md border px-1.5 py-0.5 text-xs text-muted-foreground" title="AI provider that served this run">
+                  {x.provider}
+                </span>
+              )}
               <span className="num text-xs text-muted-foreground">{x.duration_ms != null ? `${formatNumber(x.duration_ms)} ms` : "-"}</span>
               <TimeAgo date={x.started_at} className="text-xs text-muted-foreground" />
               <ChevronDown aria-hidden className="size-4 text-muted-foreground transition-transform duration-150 group-open:rotate-180" />

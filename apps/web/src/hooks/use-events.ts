@@ -9,6 +9,24 @@ import type { AppEvent } from "@/lib/types";
 export type EventsStatus = "live" | "polling" | "offline";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/events";
+const LOOPBACK = new Set(["localhost", "127.0.0.1"]);
+
+/**
+ * The default WS URL points at localhost. When the console is opened on another host (127.0.0.1, a LAN IP,
+ * a demo machine), that socket reaches the wrong machine or carries no auth cookie and the shell is stuck on
+ * Polling. Follow the page's hostname instead (cookies are host-scoped, not port-scoped).
+ * ponytail: keeps the configured port and scheme; https deployments must set NEXT_PUBLIC_WS_URL to a wss:// URL.
+ */
+export function resolveWsUrl(configured: string, pageHostname?: string) {
+  if (!pageHostname) return configured;
+  try {
+    const u = new URL(configured);
+    if (LOOPBACK.has(u.hostname) && u.hostname !== pageHostname) u.hostname = pageHostname;
+    return u.toString();
+  } catch {
+    return configured;
+  }
+}
 const MAX_EVENTS = 200;
 const POLL_MS = 4000;
 const HEARTBEAT_TIMEOUT_MS = 45_000; // server pings every 20s
@@ -55,7 +73,15 @@ function useEventStream(enabled: boolean) {
           noAuthRedirect: true,
         });
         ingest([...batch].sort((a, b) => a.id - b.id));
-        if (!disposed && ws?.readyState !== WebSocket.OPEN) setStatus("polling");
+        if (!disposed && ws?.readyState !== WebSocket.OPEN) {
+          setStatus("polling");
+          // The API answers and auth is valid: retry the socket now instead of waiting out the backoff.
+          if (ws?.readyState !== WebSocket.CONNECTING) {
+            clearTimeout(reconnectTimer);
+            attempt = 0;
+            connect();
+          }
+        }
       } catch {
         if (!disposed && ws?.readyState !== WebSocket.OPEN) setStatus("offline");
       }
@@ -77,9 +103,9 @@ function useEventStream(enabled: boolean) {
     };
 
     const connect = () => {
-      if (disposed) return;
+      if (disposed || ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) return;
       try {
-        ws = new WebSocket(WS_URL);
+        ws = new WebSocket(resolveWsUrl(WS_URL, window.location.hostname));
       } catch {
         scheduleReconnect();
         return;

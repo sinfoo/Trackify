@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Play, RotateCcw } from "lucide-react";
+import { ArrowRight, Clock, Play, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { ErrorState, PageHeader, SimulatedBadge } from "@/components/ui-kit";
 import { Button } from "@/components/ui/button";
@@ -23,19 +23,36 @@ const FOLLOW_UP: Partial<Record<DemoScenarioId, { href: string; label: string }>
   business_intelligence: { href: "/strategy", label: "Open Strategy" },
 };
 
+/** The Next dev proxy gives up after 30s and answers a bare 500 (no API envelope) while the API keeps running. */
+function isProxyTimeout(e: unknown) {
+  return e instanceof ApiError && /^HTTP_50[0-4]$/.test(e.code);
+}
+
+/** Seconds since `start` (ms epoch), ticking while `running`. */
+function useElapsed(running: boolean, start: number) {
+  const [now, setNow] = useState(start);
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [running]);
+  return Math.max(0, Math.floor((now - start) / 1000));
+}
+
 export function DemoPanel() {
   const { data: me } = useMe();
   const scenarios = useQuery({ queryKey: ["demo", "scenarios"], queryFn: () => api.get<DemoScenario[]>("/demo/scenarios"), staleTime: Infinity });
   const { events } = useEvents();
-  const [run, setRun] = useState<{ id: DemoScenarioId; baseline: number } | null>(null);
+  const [run, setRun] = useState<{ id: DemoScenarioId; baseline: number; startedAt: number } | null>(null);
   const qc = useQueryClient();
 
   const exec = useMutation({
     mutationFn: (id: DemoScenarioId) => api.post<DemoRunResult>(`/demo/scenarios/${id}/run`),
-    onMutate: (id) => setRun({ id, baseline: events[0]?.id ?? 0 }),
+    onMutate: (id) => setRun({ id, baseline: events[0]?.id ?? 0, startedAt: Date.now() }),
     onSuccess: () => qc.invalidateQueries(),
   });
 
+  const elapsed = useElapsed(exec.isPending, run?.startedAt ?? 0);
   const feed = run ? events.filter((e) => e.id > run.baseline) : [];
   const canRun = can(me, "workflows:write");
 
@@ -72,11 +89,14 @@ export function DemoPanel() {
                         ))}
                       </ol>
                       {mine && exec.data && <RunResult scenario={s.id} result={exec.data} />}
-                      {mine && exec.error && <ErrorState error={exec.error} title="Scenario failed" className="mt-3" />}
+                      {mine && exec.error && isProxyTimeout(exec.error) && <StillRunning />}
+                      {mine && exec.error && !isProxyTimeout(exec.error) && (
+                        <ErrorState error={exec.error} title="Scenario failed" className="mt-3" />
+                      )}
                     </div>
                     {canRun && (
                       <Button size="lg" className="h-11 px-5 text-base" onClick={() => exec.mutate(s.id)} disabled={exec.isPending}>
-                        <Play aria-hidden /> {exec.isPending && mine ? "Running" : "Run"}
+                        <Play aria-hidden /> {exec.isPending && mine ? <span className="num">Running {elapsed}s</span> : "Run"}
                       </Button>
                     )}
                   </li>
@@ -112,6 +132,31 @@ export function DemoPanel() {
       </div>
       <PrototypeLimits />
     </>
+  );
+}
+
+function StillRunning() {
+  return (
+    <div className="mt-4 space-y-3 rounded-lg border border-warning/40 bg-warning/10 p-4" role="status">
+      <p className="flex items-start gap-2 text-lg font-medium">
+        <Clock aria-hidden className="mt-1 size-5 shrink-0 text-warning-text" />
+        Still running on the server
+      </p>
+      <p className="text-base text-muted-foreground">
+        The AI provider is slow or rate limited, so the browser stopped waiting after 30 seconds. The agents keep
+        working: follow them in the live feed, then open the latest journey in Workflows.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild variant="outline">
+          <Link href="/workflows">
+            Open workflows <ArrowRight aria-hidden />
+          </Link>
+        </Button>
+        <Button asChild variant="ghost">
+          <Link href="/activity">Live activity</Link>
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -339,10 +339,20 @@ def handle_customer_message(db: Session, conv: Conversation, text: str) -> list[
         "INTERACTION_RESULT",
         {k: s_out[k] for k in ("intent", "interest_level", "next_action", "objections")},
     )
+    # A paid conversation stays PURCHASED: without this flag the next chat turn re-scores it as a prospect.
+    converted = (
+        db.scalar(
+            select(Transaction.id)
+            .join(Order, Transaction.order_id == Order.id)
+            .where(Order.conversation_id == conv.id, Transaction.status == TxStatus.SUCCEEDED)
+            .limit(1)
+        )
+        is not None
+    )
     insight = execute(
         db,
         "intelligence",
-        {"conversation_id": str(conv.id)},
+        {"conversation_id": str(conv.id), "converted": converted},
         wf=wf,
         task_type="analyze_conversation",
         triggered_by="sales.interaction_result",
@@ -373,10 +383,13 @@ def handle_customer_message(db: Session, conv: Conversation, text: str) -> list[
         pass
     elif s_out["next_action"] == "prepare_enrollment":
         move(db, wf, W.PRODUCT_RECOMMENDATION, "sales", "purchase intent: enrollment offered")
-    elif s_out["intent"] == "reject" or insight["purchase_intent"] < 0.2:
-        move(db, wf, W.LOW_INTENT, "intelligence", f"low purchase intent ({insight['purchase_intent']})")
+    elif s_out["intent"] == "reject":
+        move(db, wf, W.LOW_INTENT, "intelligence", "customer declined")
     elif s_out.get("recommended_product_id"):
+        # Checked before the intent score: an early "what do you recommend?" scores low but is a live lead.
         move(db, wf, W.PRODUCT_RECOMMENDATION, "sales", "product recommended")
+    elif insight["purchase_intent"] < 0.2:
+        move(db, wf, W.LOW_INTENT, "intelligence", f"low purchase intent ({insight['purchase_intent']})")
     else:
         move(db, wf, W.SALES_INTERACTION, "orchestrator", "awaiting customer")
     reply = db.get(Message, uuid.UUID(s_out["reply_message_id"]))
