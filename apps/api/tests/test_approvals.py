@@ -227,7 +227,9 @@ def test_release_after_velocity_hold_uses_the_held_attempt_method(client, db):
     db.commit()
     for i, m in enumerate(["sim_card_declined", "sim_insufficient_funds", "sim_provider_error"]):
         r = client.post(
-            f"/api/v1/public/checkout/{sid}/pay", json={"payment_method": m}, headers={"Idempotency-Key": f"velocity-{i}-attempt"}
+            f"/api/v1/public/checkout/{sid}/pay",
+            json={"payment_method": m},
+            headers={"Idempotency-Key": f"velocity-{i}-attempt"},
         )
         assert r.json()["status"] == "FAILED", r.text
     r = client.post(

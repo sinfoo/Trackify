@@ -214,3 +214,8 @@ payments:{...}, voice:{stt:"browser",tts:"browser"}, environment}` (never keys).
 - `PATCH /products/{id}` with a new `price` on an ACTIVE product does not change the price: it creates an approval
   (`action: CHANGE_PRICE`) and returns the product plus `pending_approval: {id, action, new_price}`. Approving it
   applies the price. Draft/archived products change immediately.
+- `GET /public/conversations/{id}/account` (header `X-Conversation-Token`): the buyer hub. `{customer:{full_name,email},
+  recommended: Offer & {recommended_at, pitched}[] (programs the assistant showed in this conversation, latest first),
+  enrollments: [{order_id, order_reference, order_status, created_at, product:{id,slug,name,duration_weeks,level,category},
+  amount, currency, enrollment_status, payment:{transaction_reference,status,method,paid_at,failure_reason,session_id,
+  checkout_open}|null, progress:[{key,label,state: done|pending|held|failed|upcoming, detail?}]}], journey}`.

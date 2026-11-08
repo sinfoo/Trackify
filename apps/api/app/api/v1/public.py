@@ -12,7 +12,16 @@ from app.api.v1.common import iso, offer_out
 from app.core.errors import AppError, not_found
 from app.core.security import sha256
 from app.db.base import get_db, utcnow
-from app.models import Conversation, Customer, CustomerFeedback, Message, PaymentSession, Product, ProductStatus
+from app.models import (
+    Conversation,
+    Customer,
+    CustomerFeedback,
+    EnrollmentStatus,
+    Message,
+    PaymentSession,
+    Product,
+    ProductStatus,
+)
 from app.orchestration import orchestrator
 from app.services import audit, payments
 
@@ -235,3 +244,117 @@ def feedback(body: FeedbackIn, x_conversation_token: str | None = Header(None), 
     )
     db.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- buyer hub ("My Trackify")
+
+
+def _progress(tx, enrollment) -> list[dict]:
+    """Buyer-facing progress of one enrollment. Deterministic from statuses; no invented dates."""
+    from app.models import TxStatus
+
+    paid = tx is not None and tx.status in (TxStatus.SUCCEEDED, TxStatus.REFUNDED)
+    held = tx is not None and tx.status == TxStatus.REQUIRES_APPROVAL
+    failed = tx is not None and tx.status in (TxStatus.FAILED, TxStatus.CANCELLED)
+    refunded = tx is not None and tx.status == TxStatus.REFUNDED
+    seat = enrollment is not None and enrollment.status == EnrollmentStatus.ACTIVE
+    steps = [
+        {"key": "order", "label": "Order placed", "state": "done"},
+        {
+            "key": "payment",
+            "label": "Payment",
+            "state": "done" if paid else "held" if held else "failed" if failed else "pending",
+            "detail": (f"{tx.amount} {tx.currency} · {tx.reference}" if tx else None),
+        },
+        {"key": "seat", "label": "Seat confirmed", "state": "done" if seat else "pending"},
+        {
+            "key": "welcome",
+            "label": "Welcome pack sent",
+            "state": "done" if seat else "pending",
+            "detail": "Confirmation posted in your conversation (simulated email)" if seat else None,
+        },
+        {"key": "cohort", "label": "Cohort starts", "state": "upcoming" if seat else "pending"},
+    ]
+    if refunded:
+        steps.append({"key": "refund", "label": "Refunded", "state": "done"})
+    return steps
+
+
+@router.get("/conversations/{conv_id}/account")
+def account(conv_id: uuid.UUID, x_conversation_token: str | None = Header(None), db: Session = Depends(get_db)):
+    """Everything the buyer may see about their own journey: recommendations, enrollments, receipts, progress."""
+    from app.models import Enrollment, Order, Transaction, TxStatus
+
+    conv = _conv(db, conv_id, x_conversation_token)
+    cust = conv.customer
+
+    # Programs the assistant recommended in this conversation (latest first, de-duplicated).
+    seen: dict[str, dict] = {}
+    for m in reversed(conv.messages):
+        if m.role != "agent":
+            continue
+        meta = m.meta or {}
+        cta = meta.get("cta") or {}
+        for c in meta.get("products") or []:
+            if c["id"] not in seen:
+                seen[c["id"]] = {
+                    "product_id": c["id"],
+                    "slug": c["slug"],
+                    "recommended_at": iso(m.created_at),
+                    "pitched": cta.get("product_id") == c["id"],
+                }
+    products = {str(p.id): p for p in db.scalars(select(Product).where(Product.status == ProductStatus.ACTIVE))}
+    recommended = [
+        offer_out(products[pid], db) | {"recommended_at": r["recommended_at"], "pitched": r["pitched"]}
+        for pid, r in seen.items()
+        if pid in products
+    ]
+
+    orders = list(db.scalars(select(Order).where(Order.customer_id == cust.id).order_by(Order.created_at.desc())))
+    txs = {t.order_id: t for t in db.scalars(select(Transaction).where(Transaction.customer_id == cust.id))}
+    enrs = {e.order_id: e for e in db.scalars(select(Enrollment).where(Enrollment.customer_id == cust.id))}
+    enrollments = []
+    for o in orders:
+        tx, enr = txs.get(o.id), enrs.get(o.id)
+        item = o.items[0] if o.items else None
+        p = item.product if item else None
+        enrollments.append(
+            {
+                "order_id": str(o.id),
+                "order_reference": o.reference,
+                "order_status": o.status,
+                "created_at": iso(o.created_at),
+                "product": {
+                    "id": str(p.id),
+                    "slug": p.slug,
+                    "name": p.name,
+                    "duration_weeks": p.duration_weeks,
+                    "level": p.level,
+                    "category": p.category,
+                }
+                if p
+                else None,
+                "amount": str(o.total),
+                "currency": o.currency,
+                "enrollment_status": enr.status if enr else None,
+                "payment": {
+                    "transaction_reference": tx.reference,
+                    "status": tx.status,
+                    "method": tx.payment_method,
+                    "paid_at": iso(tx.completed_at) if tx.status in (TxStatus.SUCCEEDED, TxStatus.REFUNDED) else None,
+                    "failure_reason": tx.failure_reason,
+                    "session_id": str(tx.session_id),
+                    "checkout_open": tx.status in (TxStatus.PENDING, TxStatus.FAILED, TxStatus.REQUIRES_APPROVAL)
+                    and tx.session.expires_at > utcnow(),
+                }
+                if tx
+                else None,
+                "progress": _progress(tx, enr),
+            }
+        )
+    return {
+        "customer": {"full_name": cust.full_name, "email": cust.email},
+        "recommended": recommended,
+        "enrollments": enrollments,
+        "journey": journey(db, conv),
+    }

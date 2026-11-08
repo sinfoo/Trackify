@@ -67,3 +67,37 @@ def test_health(client, path):
     r = client.get(path)
     assert r.status_code == 200
     assert r.headers["X-Content-Type-Options"] == "nosniff"
+
+
+def test_buyer_account_shows_recommendations_enrollments_and_progress(client, db):
+    from conftest import product
+
+    r = client.post(
+        "/api/v1/public/conversations", json={"full_name": "Buyer Hub", "consent_voice": False, "channel": "text"}
+    )
+    cid, h = r.json()["conversation_id"], {"X-Conversation-Token": r.json()["access_token"]}
+    client.post(
+        f"/api/v1/public/conversations/{cid}/messages", json={"content": "Tell me about cybersecurity"}, headers=h
+    )
+    acc = client.get(f"/api/v1/public/conversations/{cid}/account", headers=h).json()
+    assert [p["slug"] for p in acc["recommended"]] == ["cybersecurity"] and acc["enrollments"] == []
+    pid = str(product(db, "cybersecurity").id)
+    db.rollback()
+    sid = client.post(f"/api/v1/public/conversations/{cid}/enroll", json={"product_id": pid}, headers=h).json()[
+        "checkout_session_id"
+    ]
+    acc = client.get(f"/api/v1/public/conversations/{cid}/account", headers=h).json()
+    e = acc["enrollments"][0]
+    assert e["payment"]["checkout_open"] is True and e["progress"][1]["state"] == "pending"
+    client.post(
+        f"/api/v1/public/checkout/{sid}/pay",
+        json={"payment_method": "sim_card_success"},
+        headers={"Idempotency-Key": "buyer-hub-pay-1"},
+    )
+    e = client.get(f"/api/v1/public/conversations/{cid}/account", headers=h).json()["enrollments"][0]
+    assert e["enrollment_status"] == "ACTIVE" and e["payment"]["status"] == "SUCCEEDED"
+    assert [s["state"] for s in e["progress"]] == ["done", "done", "done", "done", "upcoming"]
+    assert (
+        client.get(f"/api/v1/public/conversations/{cid}/account", headers={"X-Conversation-Token": "nope"}).status_code
+        == 404
+    )
