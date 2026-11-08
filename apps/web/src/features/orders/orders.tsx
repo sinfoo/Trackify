@@ -1,14 +1,22 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { CreditCard, GraduationCap, Package, ShoppingCart, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  BackLink,
   DataTable,
+  DetailItem,
+  DetailList,
+  DetailPage,
+  DetailSection,
   ErrorState,
+  Facts,
   Money,
-  PageHeader,
+  PageTitle,
   SimulatedBadge,
   StatusBadge,
   TimeAgo,
@@ -20,7 +28,7 @@ import { formatDateTime } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { qk, useMe } from "@/lib/queries";
 import type { Order, Paged } from "@/lib/types";
-import { BackLink, Detail, DetailList, Section, Timeline, useUrlParams } from "@/features/payments/shared";
+import { Clock, FilterChip, ListPage, Toolbar, WhoCell, actionBtn, agentTile, initialsOf, tighten, useUrlParams } from "@/features/payments/shared";
 
 const ORDER_STATUSES = ["PENDING_PAYMENT", "PAID", "CANCELLED", "REFUNDED"];
 const PAGE_SIZE = 25;
@@ -46,40 +54,28 @@ interface AdminEnrollment {
   created_at: string;
 }
 
-const itemsLabel = (o: Order) =>
-  o.items.map((i) => (i.quantity > 1 ? `${i.product_name} x${i.quantity}` : i.product_name)).join(", ");
+const itemsLabel = (o: Order) => o.items.map((i) => (i.quantity > 1 ? `${i.product_name} ×${i.quantity}` : i.product_name)).join(", ");
 
 const columns: Column<Order>[] = [
+  { key: "ref", header: "Order", cell: (o) => <span className="num text-[13px] font-semibold">{o.reference}</span> },
+  { key: "customer", header: "Customer", cell: (o) => <WhoCell initials={initialsOf(o.customer.full_name)} title={o.customer.full_name} /> },
+  { key: "items", header: "Program", cell: (o) => <span className="block max-w-[320px] truncate text-[13.5px] font-semibold">{itemsLabel(o)}</span> },
   {
-    key: "ref",
-    header: "Reference",
+    key: "status",
+    header: "Status",
     cell: (o) => (
-      <Link href={`/orders/${o.id}`} className="num font-medium text-info-text hover:underline">
-        {o.reference}
-      </Link>
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        <StatusBadge status={o.status} className="h-6 px-[9px]" />
+        {o.transaction && o.transaction.status !== "SUCCEEDED" && <StatusBadge status={o.transaction.status} size="sm" />}
+      </span>
     ),
   },
-  {
-    key: "customer",
-    header: "Customer",
-    cell: (o) => (
-      <Link href={`/customers/${o.customer.id}`} className="hover:underline">
-        {o.customer.full_name}
-      </Link>
-    ),
-  },
-  { key: "items", header: "Items", cell: (o) => <span className="line-clamp-2 min-w-32">{itemsLabel(o)}</span> },
-  { key: "total", header: "Total", align: "right", cell: (o) => <Money value={o.total} currency={o.currency} /> },
-  { key: "status", header: "Order status", cell: (o) => <StatusBadge status={o.status} /> },
-  {
-    key: "payment",
-    header: "Payment",
-    cell: (o) => (o.transaction ? <StatusBadge status={o.transaction.status} /> : <span className="text-muted-foreground">No payment yet</span>),
-  },
-  { key: "date", header: "Created", cell: (o) => <TimeAgo date={o.created_at} /> },
+  { key: "total", header: "Amount", align: "right", cell: (o) => <Money value={o.total} currency={o.currency} className="text-[13px] font-semibold" /> },
+  { key: "date", header: "Placed", align: "right", cell: (o) => <TimeAgo date={o.created_at} className="text-[12.5px] font-medium text-t3" /> },
 ];
 
 export function OrdersView() {
+  const router = useRouter();
   const [sp, setParams] = useUrlParams();
   const status = sp.get("status") ?? "";
   const page = Math.max(1, Number(sp.get("page")) || 1);
@@ -90,41 +86,40 @@ export function OrdersView() {
   });
 
   return (
-    <>
-      <PageHeader title="Orders" description="Orders, enrollments and their payment status." />
-      <div className="space-y-4">
-        <div className="overflow-x-auto">
-          <Tabs value={status || "ALL"} onValueChange={(v) => setParams({ status: v === "ALL" ? null : v })}>
-            <TabsList aria-label="Filter by order status">
-              <TabsTrigger value="ALL">All</TabsTrigger>
-              {ORDER_STATUSES.map((s) => (
-                <TabsTrigger key={s} value={s}>
-                  {humanize(s)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-        </div>
-        <DataTable
-          columns={columns}
-          rows={list.data?.items}
-          rowKey={(o) => o.id}
-          loading={list.isPending}
-          error={list.error}
-          onRetry={() => list.refetch()}
-          emptyTitle="No orders"
-          emptyDescription={status ? "No order has this status." : "Orders appear when a customer enrolls."}
-          page={list.data?.page ?? page}
-          pageSize={list.data?.page_size ?? PAGE_SIZE}
-          total={list.data?.total}
-          onPageChange={(p) => setParams({ page: String(p) })}
-        />
-      </div>
-    </>
+    <ListPage>
+      <PageTitle title="Orders" description="Orders and enrollments opened by the Payment agent on behalf of customers." />
+      <Toolbar>
+        <FilterChip selected={!status} onClick={() => setParams({ status: null })} count={!status ? list.data?.total : undefined}>
+          All
+        </FilterChip>
+        {ORDER_STATUSES.map((s) => (
+          <FilterChip key={s} selected={status === s} onClick={() => setParams({ status: s })} count={status === s ? list.data?.total : undefined}>
+            {humanize(s)}
+          </FilterChip>
+        ))}
+      </Toolbar>
+      <DataTable
+        columns={tighten(columns)}
+        rows={list.data?.items}
+        rowKey={(o) => o.id}
+        loading={list.isPending}
+        error={list.error}
+        onRetry={() => list.refetch()}
+        emptyTitle="No orders"
+        emptyDescription={status ? "Change the filters or run a scenario from Demo control." : "Orders appear when a customer enrolls."}
+        onRowClick={(o) => router.push(`/orders/${o.id}`)}
+        page={list.data?.page ?? page}
+        pageSize={list.data?.page_size ?? PAGE_SIZE}
+        total={list.data?.total}
+        onPageChange={(p) => setParams({ page: String(p) })}
+        minWidth={860}
+      />
+    </ListPage>
   );
 }
 
 export function OrderDetail({ id }: { id: string }) {
+  const router = useRouter();
   const { data: me } = useMe();
   const order = useQuery({ queryKey: [...qk.orders, id], queryFn: () => api.get<OrderDetailData>(`/orders/${id}`) });
   const o = order.data;
@@ -136,111 +131,136 @@ export function OrderDetail({ id }: { id: string }) {
     select: (d) => d.items.filter((e) => e.order_id === id),
     enabled: !!customerId,
   });
+  const canPayments = can(me, "payments:read");
 
   if (order.error)
     return (
       <>
-        <BackLink href="/orders" label="Orders" />
+        <BackLink href="/orders">All orders</BackLink>
         <ErrorState error={order.error} title="Could not load this order" onRetry={() => order.refetch()} />
       </>
     );
 
   return (
-    <>
-      <BackLink href="/orders" label="Orders" />
-      <PageHeader
-        title={o ? <span className="num">{o.reference}</span> : <Skeleton className="h-8 w-48" />}
-        description={o ? `Created ${formatDateTime(o.created_at)}` : undefined}
-        actions={o && <StatusBadge status={o.status} />}
-      />
+    <DetailPage
+      back={{ href: "/orders", label: "All orders" }}
+      eyebrow="Order"
+      title={o ? <span className="num">{o.reference}</span> : <Skeleton className="h-8 w-48" />}
+      tile={{ icon: ShoppingCart, ...agentTile("payment") }}
+      badge={o && <StatusBadge status={o.status} size="lg" />}
+      meta={o ? [o.customer.full_name, `Placed ${formatDateTime(o.created_at)}`] : []}
+      actions={
+        o && (
+          <>
+            <Button asChild variant="outline" className={actionBtn}>
+              <Link href={`/customers/${o.customer.id}`}>
+                <User aria-hidden /> Open customer
+              </Link>
+            </Button>
+            {o.transaction && canPayments && (
+              <Button asChild className={actionBtn}>
+                <Link href={`/payments/${o.transaction.id}`}>
+                  <CreditCard aria-hidden /> Open payment
+                </Link>
+              </Button>
+            )}
+          </>
+        )
+      }
+      aside={
+        <DetailSection title="Summary" actions={<SimulatedBadge className="h-7 text-xs" />}>
+          {o ? (
+            <Facts
+              items={[
+                { k: "Program", v: itemsLabel(o) },
+                { k: "Amount", v: <Money value={o.total} currency={o.currency} />, mono: true },
+                { k: "Customer", v: o.customer.full_name },
+                {
+                  k: "Payment",
+                  v: o.transaction ? (
+                    <span className="inline-flex flex-wrap items-center justify-end gap-1.5">
+                      <StatusBadge status={o.transaction.status} size="sm" />
+                      {canPayments ? (
+                        <Link href={`/payments/${o.transaction.id}`} className="num text-brand-text hover:underline">
+                          {o.transaction.reference}
+                        </Link>
+                      ) : (
+                        <span className="num">{o.transaction.reference}</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="text-t3">No payment yet</span>
+                  ),
+                },
+                {
+                  k: "Enrollment",
+                  v: enrollments.isPending && customerId ? (
+                    <Skeleton className="ml-auto h-5 w-24" />
+                  ) : enrollments.error ? (
+                    <span className="text-t3">Unavailable</span>
+                  ) : enrollments.data?.length ? (
+                    <span className="inline-flex flex-wrap justify-end gap-1.5">
+                      {enrollments.data.map((e) => (
+                        <StatusBadge key={e.id} status={e.status} size="sm" />
+                      ))}
+                    </span>
+                  ) : (
+                    <span className="text-t3">No enrollment</span>
+                  ),
+                },
+                { k: "Created by", v: "Payment agent" },
+                { k: "Created", v: formatDateTime(o.created_at) },
+              ]}
+            />
+          ) : (
+            <Skeleton className="mt-3 h-56" />
+          )}
+        </DetailSection>
+      }
+    >
       {!o ? (
         <Skeleton className="h-80" />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <Section title="Customer and items">
+        <>
+          <DetailSection title="Items" count={o.items.length}>
             <DetailList>
-              <Detail label="Customer">
-                <Link href={`/customers/${o.customer.id}`} className="text-info-text hover:underline">
-                  {o.customer.full_name}
-                </Link>
-              </Detail>
-              <Detail label="Total">
-                <Money value={o.total} currency={o.currency} className="text-lg font-semibold" />
-              </Detail>
-            </DetailList>
-            <ul className="mt-4 divide-y rounded-lg border">
               {o.items.map((i) => (
-                <li key={i.product_id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2.5">
-                  <Link href={`/products/${i.product_id}`} className="font-medium hover:underline">
-                    {i.product_name}
-                  </Link>
-                  <span className="text-sm text-muted-foreground">
-                    <span className="num">{i.quantity}</span> x <Money value={i.unit_price} currency={o.currency} />
-                  </span>
-                </li>
+                <DetailItem
+                  key={i.product_id}
+                  icon={Package}
+                  {...agentTile("sales")}
+                  title={i.product_name}
+                  sub={
+                    <>
+                      <span className="num">{i.quantity}</span> × <Money value={i.unit_price} currency={o.currency} />
+                    </>
+                  }
+                  actions={
+                    <Button variant="outline" size="xs" onClick={() => router.push(`/products/${i.product_id}`)}>
+                      Program
+                    </Button>
+                  }
+                />
               ))}
-            </ul>
-          </Section>
-          <Section title="Payment and enrollment" actions={<SimulatedBadge />}>
-            <DetailList>
-              <Detail label="Payment">
-                {o.transaction ? (
-                  <span className="flex flex-wrap items-center gap-2">
-                    <StatusBadge status={o.transaction.status} />
-                    {can(me, "payments:read") ? (
-                      <Link href={`/payments/${o.transaction.id}`} className="num text-sm text-info-text hover:underline">
-                        {o.transaction.reference}
-                      </Link>
-                    ) : (
-                      <span className="num text-sm">{o.transaction.reference}</span>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">No payment yet</span>
-                )}
-              </Detail>
-              <Detail label="Enrollment">
-                {enrollments.isPending ? (
-                  <Skeleton className="h-6 w-24" />
-                ) : enrollments.error ? (
-                  <span className="text-sm text-muted-foreground">Unavailable</span>
-                ) : enrollments.data?.length ? (
-                  <span className="flex flex-wrap gap-2">
-                    {enrollments.data.map((e) => (
-                      <StatusBadge key={e.id} status={e.status} label={`${humanize(e.status)}: ${e.product.name}`} />
-                    ))}
-                  </span>
-                ) : (
-                  <span className="text-muted-foreground">No enrollment</span>
-                )}
-              </Detail>
             </DetailList>
-          </Section>
-          <Section title="Timeline" className="lg:col-span-2">
-            <Timeline
-              items={o.timeline.map((t, i) => ({
-                key: `${i}-${t.created_at}`,
-                at: t.created_at,
-                title: (
-                  <span className="flex flex-wrap items-center gap-2">
-                    {t.from_status && (
-                      <>
-                        <StatusBadge status={t.from_status} />
-                        <span aria-label="to">→</span>
-                      </>
-                    )}
-                    <StatusBadge status={t.status} />
-                  </span>
-                ),
-                meta: [t.type === "order.created" ? "Order created" : "Payment status", t.actor && `by ${t.actor}`]
-                  .filter(Boolean)
-                  .join(" "),
-                body: t.note,
-              }))}
-            />
-          </Section>
-        </div>
+          </DetailSection>
+          <DetailSection title="Timeline" count={o.timeline.length}>
+            <DetailList empty="No events yet.">
+              {o.timeline.map((t, i) => (
+                <DetailItem
+                  key={`${i}-${t.created_at}`}
+                  icon={t.type === "order.created" ? ShoppingCart : t.type.startsWith("enrollment") ? GraduationCap : CreditCard}
+                  {...agentTile(t.type === "order.created" ? "orchestrator" : "payment")}
+                  title={t.type === "order.created" ? "Order created" : t.from_status ? `${humanize(t.from_status)} → ${humanize(t.status)}` : "Payment status"}
+                  pill={<StatusBadge status={t.status} size="sm" />}
+                  sub={[t.note, t.actor && `by ${t.actor}`].filter(Boolean).join(" · ") || undefined}
+                  time={<Clock date={t.created_at} />}
+                />
+              ))}
+            </DetailList>
+          </DetailSection>
+        </>
       )}
-    </>
+    </DetailPage>
   );
 }

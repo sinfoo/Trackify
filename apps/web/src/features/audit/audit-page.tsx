@@ -3,31 +3,65 @@
 import { Fragment, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ChevronRight, Link2, Lock, ShieldCheck, ShieldX } from "lucide-react";
+import { toast } from "sonner";
+import { BadgeCheck, ChevronDown, Copy, Lock, ShieldCheck, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { EmptyState, ErrorState, PageHeader, TimeAgo } from "@/components/ui-kit";
+import { DetailNotice, EmptyState, ErrorState, PageTitle } from "@/components/ui-kit";
 import { api } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, formatNumber } from "@/lib/format";
 import type { AuditLog, AuditVerify, Paged } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { ALL, Actor, JsonView, Notice, errorText, unAll } from "@/features/security/shared";
+import { ALL, JsonView, unAll } from "@/features/security/shared";
+import { ActorCell, Clock, FilterChip, FilterSelect, ListPage, SearchBox, Toolbar, actionBtn, errorText, selectClass, tight, useDebouncedSearch } from "@/features/payments/shared";
 import { AuditSeverity, OutcomeBadge } from "./audit-trail";
 
 const PAGE_SIZE = 25;
-const ACTOR_TYPES = ["user", "agent", "system", "customer"];
+const ACTOR_TYPES: [string, string][] = [
+  ["user", "Humans"],
+  ["agent", "Agents"],
+  ["system", "System"],
+  ["customer", "Customers"],
+];
 const SEVERITIES = ["INFO", "WARN", "CRITICAL"];
-const TEXT_FILTERS = ["actor_id", "action", "date_from", "date_to"] as const;
 
-function Hash({ value, label }: { value?: string | null; label: string }) {
-  if (!value) return <span className="text-muted-foreground">{label === "prev" ? "Not returned by the API" : "-"}</span>;
+const short = (h: string) => `${h.slice(0, 8)}…${h.slice(-4)}`;
+
+/** Mono --t4 hash with a copy button (prototype "Chain" column). */
+function HashCell({ value, label = "hash" }: { value?: string | null; label?: string }) {
+  if (!value) return <span className="text-t4">{label === "prev" ? "not returned by the API" : "—"}</span>;
   return (
-    <span className="num text-xs break-all" title={value}>
-      {value.slice(0, 16)}...{value.slice(-8)}
+    <span className="inline-flex items-center gap-1.5">
+      <span className="num text-[11.5px] font-medium text-t4" title={value}>
+        {short(value)}
+      </span>
+      <button
+        type="button"
+        aria-label={`Copy ${label}`}
+        className="grid size-6 place-items-center rounded-md text-t4 hover:bg-panel3 hover:text-text focus-visible:ring-2 focus-visible:ring-brand/35 focus-visible:outline-none"
+        onClick={(e) => {
+          e.stopPropagation();
+          void navigator.clipboard?.writeText(value).then(() => toast.success("Hash copied"));
+        }}
+      >
+        <Copy aria-hidden className="size-3" />
+      </button>
+    </span>
+  );
+}
+
+/** One-line summary from what the API gives (there is no summary column): note, resource, outcome, severity. */
+function Summary({ l }: { l: AuditLog }) {
+  const note = typeof l.details?.note === "string" ? l.details.note : typeof l.details?.reason === "string" ? l.details.reason : null;
+  return (
+    <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
+      <span className="truncate text-[13.5px] font-medium">
+        {note ?? (l.resource_type ? `${l.resource_type}${l.resource_id ? " " : ""}` : "—")}
+        {!note && l.resource_id && <span className="num text-t3">{l.resource_id.slice(0, 8)}</span>}
+      </span>
+      {l.outcome && l.outcome.toUpperCase() !== "SUCCESS" && <OutcomeBadge outcome={l.outcome} />}
+      {l.severity !== "INFO" && <AuditSeverity severity={l.severity} />}
     </span>
   );
 }
@@ -46,7 +80,7 @@ export function AuditPage() {
     date_to: params.get("date_to") ?? undefined,
   };
 
-  const setParams = (patch: Record<string, string | undefined>) => {
+  const setParams = (patch: Record<string, string | null | undefined>) => {
     const next = new URLSearchParams(params.toString());
     for (const [k, v] of Object.entries(patch)) {
       if (!v || v === ALL || (k === "page" && v === "1")) next.delete(k);
@@ -56,6 +90,8 @@ export function AuditPage() {
     const s = next.toString();
     router.replace(s ? `/audit?${s}` : "/audit", { scroll: false });
   };
+  const [action, setAction] = useDebouncedSearch(filters.action ?? "", (v) => setParams({ action: v }));
+  const [actor, setActor] = useDebouncedSearch(filters.actor_id ?? "", (v) => setParams({ actor_id: v }));
 
   const q = useQuery({
     queryKey: ["audit", "logs", filters, page],
@@ -63,218 +99,167 @@ export function AuditPage() {
     placeholderData: (prev) => prev,
   });
 
-  const verify = useMutation({ mutationFn: () => api.get<AuditVerify>("/audit/verify") });
+  const verify = useMutation({
+    mutationFn: () => api.get<AuditVerify>("/audit/verify"),
+    onSuccess: (r) => (r.ok ? toast.success(`Chain verified: ${formatNumber(q.data?.total)} rows intact`) : toast.error(`Chain broken at record #${r.first_broken_id}`)),
+  });
   const pages = q.data ? Math.max(1, Math.ceil(q.data.total / PAGE_SIZE)) : 1;
   const hasFilters = Object.values(filters).some(Boolean);
+  const shown = q.data?.items.length ?? 0;
+  const from = shown ? (page - 1) * PAGE_SIZE + 1 : 0;
 
   return (
-    <>
-      <PageHeader
-        title="Audit log"
-        description="Every action by users, agents and the system, chained with SHA-256 so tampering is detectable."
+    <ListPage>
+      <PageTitle
+        title="Audit"
+        description="Tamper-evident log of every agent action, payment event and human decision. Each row is chained to the previous hash."
         actions={
-          <Button onClick={() => verify.mutate()} disabled={verify.isPending}>
-            <Link2 aria-hidden /> {verify.isPending ? "Verifying..." : "Verify integrity"}
+          <Button variant="outline" className={actionBtn} onClick={() => verify.mutate()} disabled={verify.isPending}>
+            <BadgeCheck aria-hidden /> {verify.isPending ? "Verifying…" : "Verify integrity"}
           </Button>
         }
       />
-
-      <div className="mb-4 space-y-3">
-        <Notice icon={Lock} tone="neutral" title="Read-only. Records cannot be edited or deleted.">
-          The API exposes no update or delete route, and each record stores the hash of the one before it.
-        </Notice>
-        <div aria-live="polite">
-          {verify.data &&
-            (verify.data.ok ? (
-              <Notice icon={ShieldCheck} tone="success" title="Chain intact">
-                Every record&apos;s hash was recomputed and matches its predecessor. No record has been altered or removed.
-              </Notice>
-            ) : (
-              <Notice icon={ShieldX} tone="danger" title={`Chain broken at record #${verify.data.first_broken_id}`}>
-                This record or one before it was modified outside the application. Treat the log after this point as untrusted.
-              </Notice>
-            ))}
-          {verify.error && (
-            <Notice tone="danger" title="Verification failed">
-              {errorText(verify.error)}
-            </Notice>
-          )}
-        </div>
+      <div className="grid gap-3" aria-live="polite">
+        <DetailNotice icon={Lock} tone="neutral" title="Read-only.">
+          Records cannot be edited or deleted: the API exposes no update or delete route, and each record stores the hash of the one before it.
+        </DetailNotice>
+        {verify.data &&
+          (verify.data.ok ? (
+            <DetailNotice icon={ShieldCheck} tone="success" title="Chain intact.">
+              Every record&apos;s hash was recomputed and matches its predecessor. No record has been altered or removed.
+            </DetailNotice>
+          ) : (
+            <DetailNotice icon={ShieldX} tone="danger" title={`Chain broken at record #${verify.data.first_broken_id}.`}>
+              This record or one before it was modified outside the application. Treat the log after this point as untrusted.
+            </DetailNotice>
+          ))}
+        {verify.error && (
+          <DetailNotice icon={ShieldX} tone="danger" title="Verification failed.">
+            {errorText(verify.error)}
+          </DetailNotice>
+        )}
       </div>
 
-      <form
-        key={params.toString()}
-        className="mb-4 grid grid-cols-2 gap-3 rounded-xl border bg-card p-4 md:grid-cols-3 xl:grid-cols-7 xl:items-end"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const fd = new FormData(e.currentTarget);
-          setParams(Object.fromEntries(TEXT_FILTERS.map((k) => [k, String(fd.get(k) ?? "").trim() || undefined])));
-        }}
-      >
-        <div className="space-y-1.5">
-          <Label htmlFor="f-actor-type">Actor type</Label>
-          <Select value={filters.actor_type ?? ALL} onValueChange={(v) => setParams({ actor_type: v })}>
-            <SelectTrigger id="f-actor-type" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Any</SelectItem>
-              {ACTOR_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-severity">Severity</Label>
-          <Select value={filters.severity ?? ALL} onValueChange={(v) => setParams({ severity: v })}>
-            <SelectTrigger id="f-severity" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL}>Any</SelectItem>
-              {SEVERITIES.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s.charAt(0) + s.slice(1).toLowerCase()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-actor">Actor ID</Label>
-          <Input id="f-actor" name="actor_id" defaultValue={filters.actor_id} placeholder="agent:payment" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-action">Action starts with</Label>
-          <Input id="f-action" name="action" defaultValue={filters.action} placeholder="approval." />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-from">From</Label>
-          <Input id="f-from" name="date_from" type="date" defaultValue={filters.date_from} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="f-to">To</Label>
-          <Input id="f-to" name="date_to" type="date" defaultValue={filters.date_to} />
-        </div>
-        <div className="col-span-2 flex gap-2 md:col-span-3 xl:col-span-1">
-          <Button type="submit" variant="secondary" className="flex-1">
-            Apply
+      <Toolbar>
+        <SearchBox value={action} onChange={setAction} placeholder="Search actions… (prefix, e.g. payment.)" label="Filter by action prefix" />
+        <FilterChip selected={!filters.actor_type} onClick={() => setParams({ actor_type: null })} count={!filters.actor_type && q.data ? formatNumber(q.data.total) : undefined}>
+          All
+        </FilterChip>
+        {ACTOR_TYPES.map(([v, l]) => (
+          <FilterChip key={v} selected={filters.actor_type === v} onClick={() => setParams({ actor_type: v })} count={filters.actor_type === v && q.data ? formatNumber(q.data.total) : undefined}>
+            {l}
+          </FilterChip>
+        ))}
+        <FilterSelect label="Severity" value={filters.severity ?? ""} onChange={(v) => setParams({ severity: v || null })}>
+          <option value="">Any severity</option>
+          {SEVERITIES.map((s) => (
+            <option key={s} value={s}>
+              {s.charAt(0) + s.slice(1).toLowerCase()}
+            </option>
+          ))}
+        </FilterSelect>
+        <input aria-label="Actor ID" placeholder="Actor, e.g. agent:payment" value={actor} onChange={(e) => setActor(e.target.value)} className={cn(selectClass, "w-[200px] placeholder:text-t4")} />
+        <input aria-label="From date" type="date" value={filters.date_from ?? ""} onChange={(e) => setParams({ date_from: e.target.value || null })} className={cn(selectClass, "num")} />
+        <input aria-label="To date" type="date" value={filters.date_to ?? ""} onChange={(e) => setParams({ date_to: e.target.value || null })} className={cn(selectClass, "num")} />
+        {hasFilters && (
+          <Button type="button" variant="ghost" className="h-10 rounded-xl" onClick={() => router.replace("/audit", { scroll: false })}>
+            Clear
           </Button>
-          {hasFilters && (
-            <Button type="button" variant="ghost" onClick={() => router.replace("/audit", { scroll: false })}>
-              Clear
-            </Button>
-          )}
-        </div>
-      </form>
+        )}
+      </Toolbar>
 
       {q.error && !q.isLoading ? (
         <ErrorState error={q.error} title="Could not load the audit log" onRetry={() => q.refetch()} />
       ) : q.data && q.data.items.length === 0 ? (
-        <EmptyState title="No records match" description="Adjust or clear the filters." />
+        <EmptyState title="No records match" description="Change the filters or run a scenario from Demo control." />
       ) : (
-        <div className="rounded-xl border bg-card">
-          <Table>
+        <div className="overflow-hidden rounded-[22px] border border-hair bg-panel shadow-card">
+          <Table minWidth={900}>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-10">
+                <TableHead className={cn(tight, "w-[90px]")}>Time</TableHead>
+                <TableHead className={tight}>Actor</TableHead>
+                <TableHead className={tight}>Action</TableHead>
+                <TableHead className={tight}>Summary</TableHead>
+                <TableHead className={cn(tight, "w-[150px]")}>Chain</TableHead>
+                <TableHead className={cn(tight, "w-10")}>
                   <span className="sr-only">Expand</span>
                 </TableHead>
-                <TableHead>Time</TableHead>
-                <TableHead>Actor</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead className="hidden md:table-cell">Resource</TableHead>
-                <TableHead className="hidden sm:table-cell">Outcome</TableHead>
-                <TableHead className="hidden sm:table-cell">Severity</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody aria-busy={q.isFetching || undefined}>
               {q.isLoading
                 ? Array.from({ length: 8 }, (_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 7 }, (_, j) => (
-                        <TableCell key={j}>
-                          <Skeleton className="h-4 w-full max-w-32" />
+                    <TableRow key={i} className="hover:bg-transparent">
+                      {Array.from({ length: 6 }, (_, j) => (
+                        <TableCell key={j} className={tight}>
+                          <Skeleton className="h-3.5 w-full" style={{ maxWidth: `${55 + ((i * 17 + j * 7) % 40)}%` }} />
                         </TableCell>
                       ))}
                     </TableRow>
                   ))
-                : q.data?.items.map((l) => {
+                : q.data?.items.map((l, i) => {
                     const isOpen = open === l.id;
+                    const toggle = () => setOpen(isOpen ? null : l.id);
                     return (
                       <Fragment key={l.id}>
-                        <TableRow className={cn(isOpen && "bg-muted/40")}>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-expanded={isOpen}
-                              aria-controls={`audit-${l.id}`}
-                              aria-label={`${isOpen ? "Hide" : "Show"} details for record ${l.id}`}
-                              onClick={() => setOpen(isOpen ? null : l.id)}
-                            >
-                              <ChevronDown aria-hidden className={cn("transition-transform", isOpen && "rotate-180")} />
-                            </Button>
+                        <TableRow
+                          tabIndex={0}
+                          aria-expanded={isOpen}
+                          aria-controls={`audit-${l.id}`}
+                          onClick={toggle}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggle();
+                            }
+                          }}
+                          className={cn("anim-row-in cursor-pointer", isOpen && "bg-panel2")}
+                          style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
+                        >
+                          <TableCell className={tight}>
+                            <Clock date={l.created_at} className="text-[12.5px] font-medium text-t3" />
+                            <span className="num block text-[11px] text-t4">{formatDateTime(l.created_at).slice(0, 11)}</span>
                           </TableCell>
-                          <TableCell>
-                            <TimeAgo date={l.created_at} className="text-sm" />
-                            <div className="num text-xs text-muted-foreground">#{l.id}</div>
+                          <TableCell className={tight}>
+                            <ActorCell type={l.actor_type} id={l.actor_id} />
                           </TableCell>
-                          <TableCell>
-                            <Actor type={l.actor_type} id={l.actor_id} />
+                          <TableCell className={cn(tight, "num text-[12.5px] font-semibold")}>{l.action}</TableCell>
+                          <TableCell className={cn(tight, "max-w-[320px] whitespace-normal")}>
+                            <Summary l={l} />
                           </TableCell>
-                          <TableCell className="num text-xs font-medium">{l.action}</TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            {l.resource_type ? (
-                              <span className="text-sm">
-                                {l.resource_type}
-                                {l.resource_id && <span className="num block max-w-40 truncate text-xs text-muted-foreground" title={l.resource_id}>{l.resource_id}</span>}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">-</span>
-                            )}
+                          <TableCell className={tight}>
+                            <HashCell value={l.hash} />
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell">
-                            <OutcomeBadge outcome={l.outcome} />
-                          </TableCell>
-                          <TableCell className="hidden sm:table-cell">
-                            <AuditSeverity severity={l.severity} />
+                          <TableCell className={cn(tight, "text-right")}>
+                            <ChevronDown aria-hidden className={cn("inline size-4 text-t4 transition-transform", isOpen && "rotate-180")} />
                           </TableCell>
                         </TableRow>
                         {isOpen && (
-                          <TableRow id={`audit-${l.id}`} className="bg-muted/20 hover:bg-muted/20">
-                            <TableCell colSpan={7} className="whitespace-normal">
-                              <div className="grid gap-4 py-2 lg:grid-cols-[1fr_22rem]">
+                          <TableRow id={`audit-${l.id}`} className="bg-panel2 hover:bg-panel2">
+                            <TableCell colSpan={6} className="whitespace-normal">
+                              <div className="grid gap-4 py-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
                                 <div>
-                                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">Details</p>
-                                  <JsonView value={l.details} />
+                                  <p className="eyebrow mb-2">Details</p>
+                                  <JsonView value={l.details} className="border-hair bg-panel" />
                                 </div>
-                                <dl className="space-y-2 text-sm">
-                                  <div className="sm:hidden">
-                                    <dt className="text-xs text-muted-foreground">Outcome / severity</dt>
-                                    <dd className="mt-1 flex gap-2">
-                                      <OutcomeBadge outcome={l.outcome} /> <AuditSeverity severity={l.severity} />
-                                    </dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-xs text-muted-foreground">Timestamp (UTC source)</dt>
-                                    <dd className="num text-xs">{formatDateTime(l.created_at)}</dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-xs text-muted-foreground">IP</dt>
-                                    <dd className="num text-xs">{l.ip ?? "-"}</dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-xs text-muted-foreground">Hash</dt>
-                                    <dd><Hash value={l.hash} label="hash" /></dd>
-                                  </div>
-                                  <div>
-                                    <dt className="text-xs text-muted-foreground">Previous hash</dt>
-                                    <dd><Hash value={l.prev_hash} label="prev" /></dd>
-                                  </div>
+                                <dl className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-x-[18px] text-[13px]">
+                                  {(
+                                    [
+                                      ["Record", <span key="r" className="num">#{l.id}</span>],
+                                      ["Outcome", <span key="o" className="inline-flex flex-wrap justify-end gap-1.5"><OutcomeBadge outcome={l.outcome} /><AuditSeverity severity={l.severity} /></span>],
+                                      ["Resource", l.resource_type ? <span key="t">{l.resource_type}{l.resource_id && <span className="num block text-xs text-t3">{l.resource_id}</span>}</span> : "—"],
+                                      ["Timestamp", <span key="ts" className="num">{formatDateTime(l.created_at)}</span>],
+                                      ["IP", <span key="ip" className="num">{l.ip ?? "—"}</span>],
+                                      ["Hash", <HashCell key="h" value={l.hash} />],
+                                      ["Previous hash", <HashCell key="p" value={l.prev_hash} label="prev" />],
+                                    ] as [string, React.ReactNode][]
+                                  ).map(([k, v]) => (
+                                    <div key={k} className="contents">
+                                      <dt className="border-t border-hair py-2 text-t3">{k}</dt>
+                                      <dd className="min-w-0 border-t border-hair py-2 text-right font-semibold [overflow-wrap:anywhere]">{v}</dd>
+                                    </div>
+                                  ))}
                                 </dl>
                               </div>
                             </TableCell>
@@ -285,23 +270,19 @@ export function AuditPage() {
                   })}
             </TableBody>
           </Table>
-          {q.data && (
-            <div className="flex items-center justify-between gap-2 border-t px-4 py-2.5 text-sm text-muted-foreground">
-              <span className="num">
-                Page {page} of {pages} · {q.data.total} records
-              </span>
-              <div className="flex gap-1">
-                <Button variant="outline" size="icon-sm" aria-label="Previous page" disabled={page <= 1} onClick={() => setParams({ page: String(page - 1) })}>
-                  <ChevronLeft aria-hidden />
-                </Button>
-                <Button variant="outline" size="icon-sm" aria-label="Next page" disabled={page >= pages} onClick={() => setParams({ page: String(page + 1) })}>
-                  <ChevronRight aria-hidden />
-                </Button>
-              </div>
-            </div>
-          )}
+          <div className="flex items-center justify-between gap-2 border-t border-hair px-5 py-3 text-[12.5px] text-t3">
+            <span className="tabular">{q.data ? `Showing ${from}–${from + shown - 1} of ${formatNumber(q.data.total)} entries` : "Loading…"}</span>
+            <span className="inline-flex gap-1.5">
+              <Button variant="outline" size="sm" className="h-[30px] rounded-lg px-2.5 text-[12.5px] text-t2" disabled={page <= 1} onClick={() => setParams({ page: String(page - 1) })}>
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" className="h-[30px] rounded-lg px-2.5 text-[12.5px] text-t2" disabled={page >= pages} onClick={() => setParams({ page: String(page + 1) })}>
+                Next
+              </Button>
+            </span>
+          </div>
         </div>
       )}
-    </>
+    </ListPage>
   );
 }

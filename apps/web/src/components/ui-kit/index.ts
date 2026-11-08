@@ -4,3 +4,4 @@ export { AgentAvatar, AGENT_META, agentMeta, agentColors, type AgentMeta, type A
 export { DataTable, type Column, type DataTableProps } from "./data-table";
 export { PageHeader, EmptyState, ErrorState } from "./states";
 export { Money, TimeAgo, SimulatedBadge, ChartCard, Eyebrow, PageTitle, BackLink, Pill, Tile, RiskBar, Sparkline } from "./misc";
+export { DetailPage, DetailNotice, DetailSection, DetailItem, DetailList, Facts, FactChips } from "./detail-page";
