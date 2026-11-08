@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, UserCheck } from "lucide-react";
+import { ArrowRight, GitBranch, Hand, X } from "lucide-react";
 import { toast } from "sonner";
-import { AgentAvatar, AGENT_META, EmptyState, ErrorState, Money, PageHeader, StatusBadge, TimeAgo } from "@/components/ui-kit";
+import { agentColors, agentMeta, BackLink, ErrorState, Eyebrow, Money, StatusBadge, Tile, TimeAgo, humanize } from "@/components/ui-kit";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEvents } from "@/hooks/use-events";
@@ -14,11 +14,14 @@ import { formatDateTime } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { qk, useMe } from "@/lib/queries";
 import type { AgentMessage, WorkflowDetail as WorkflowDetailT } from "@/lib/types";
-import { ExecutionList } from "@/features/agents/execution-list";
+import { cn } from "@/lib/utils";
+import { ExecutionTable } from "@/features/agents/execution-list";
 import { JsonBlock } from "@/features/agents/json-block";
 import { JourneyGraph } from "./journey-graph";
 
 const FINISHED = new Set(["COMPLETED", "CANCELLED", "BLOCKED"]);
+const CARD = "rounded-[22px] border border-hair bg-panel px-5 py-[18px] shadow-card";
+const clock = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
 function compact(payload: Record<string, unknown>) {
   return Object.entries(payload ?? {})
@@ -26,28 +29,26 @@ function compact(payload: Record<string, unknown>) {
     .join("  ");
 }
 
-function Who({ id }: { id: string }) {
-  if (id === "human")
-    return (
-      <span className="inline-flex items-center gap-1.5 text-sm font-medium">
-        <UserCheck aria-hidden className="size-4" /> Human
-      </span>
-    );
+const short = (id: string | null | undefined) => (id ? id.slice(0, 8) : "—");
+
+function Fact({ k, v, mono }: { k: string; v: ReactNode; mono?: boolean }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <AgentAvatar agentId={id} size="sm" />
-      <span className="text-sm font-medium">{AGENT_META[id]?.name ?? id}</span>
-    </span>
+    <>
+      <dt className="border-t border-hair py-[9px] text-[13px] text-t3">{k}</dt>
+      <dd className={cn("border-t border-hair py-[9px] text-right text-[13.5px] font-semibold [overflow-wrap:anywhere]", mono ? "num" : "tabular")}>{v}</dd>
+    </>
   );
 }
 
-function Panel({ title, count, children }: { title: string; count?: number; children: React.ReactNode }) {
+/** Prototype detail section: eyebrow + mono count, rows 11px 0 with hairline tops. */
+function Section({ title, count, children, className }: { title: string; count?: number; children: ReactNode; className?: string }) {
   return (
-    <section aria-label={title} className="min-w-0">
-      <h2 className="mb-3 text-lg font-semibold">
-        {title} {count !== undefined && <span className="num text-base font-normal text-muted-foreground">({count})</span>}
-      </h2>
-      {children}
+    <section aria-label={title} className={cn(CARD, "min-w-0", className)}>
+      <div className="flex items-baseline justify-between">
+        <Eyebrow>{title}</Eyebrow>
+        {count !== undefined && <span className="num text-xs text-t3">{count}</span>}
+      </div>
+      <div className="mt-2">{children}</div>
     </section>
   );
 }
@@ -69,111 +70,145 @@ export function WorkflowDetail({ id }: { id: string }) {
   }, [events, id, qc]);
 
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
-  if (q.isPending) return <Skeleton className="h-[600px] w-full" />;
+  if (q.isPending)
+    return (
+      <>
+        <Skeleton className="h-4 w-28" />
+        <Skeleton className="h-16 w-full max-w-xl" />
+        <Skeleton className="h-28 w-full rounded-[22px]" />
+        <Skeleton className="h-[420px] w-full rounded-[22px]" />
+      </>
+    );
   const w = q.data;
+  const agentsInvolved = new Set([...w.executions.map((x) => x.agent_id), ...w.steps.flatMap((s) => (s.agent_id ? [s.agent_id] : []))]);
 
   return (
     <>
-      <Link href="/workflows" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft aria-hidden className="size-4" /> All workflows
-      </Link>
-      <PageHeader
-        title={w.label}
-        description={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <StatusBadge status={w.state} />
-            <span>{w.customer_name ?? "No customer"}</span>
-            <span className="num text-sm">{w.id}</span>
-            <span className="text-sm">
-              Started <TimeAgo date={w.created_at} />, updated <TimeAgo date={w.updated_at} />
-            </span>
-          </span>
-        }
-        actions={can(me, "workflows:write") && !FINISHED.has(w.state) ? <CancelControl id={id} /> : undefined}
-      />
+      <BackLink href="/workflows">All workflows</BackLink>
+
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-[1_1_520px] items-center gap-4">
+          <Tile icon={GitBranch} size={56} radius={18} iconSize={26} {...agentColors("orchestrator")} />
+          <div className="min-w-0">
+            <Eyebrow>Workflow · {humanize(w.kind.toUpperCase())}</Eyebrow>
+            <h1 className="headline mt-0.5 text-[26px] leading-[1.15]">{w.label}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-2.5 text-[13px] text-t3">
+              <StatusBadge status={w.state} size="lg" />
+              <span className="num">{w.id}</span>
+              <span>{w.customer_name ?? "No customer"}</span>
+              <span>
+                Started <TimeAgo date={w.created_at} /> · updated <TimeAgo date={w.updated_at} />
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {w.state === "AWAITING_APPROVAL" && (
+            <Button asChild className="h-10 rounded-xl px-4">
+              <Link href="/approvals" className="no-underline hover:no-underline">
+                <Hand aria-hidden /> Open approval
+              </Link>
+            </Button>
+          )}
+          {can(me, "workflows:write") && !FINISHED.has(w.state) && <CancelControl id={id} />}
+        </div>
+      </div>
+
       {w.error && (
-        <p role="alert" className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-4 py-2 text-danger-text">
-          {w.error}
+        <p role="alert" className="flex items-start gap-3 rounded-[18px] border border-danger bg-danger-bg px-4 py-3.5 text-[13.5px] leading-[1.5] text-danger">
+          <X aria-hidden className="mt-0.5 size-[18px] shrink-0" strokeWidth={2.2} />
+          <span>
+            <span className="font-extrabold">Error. </span>
+            {w.error}
+          </span>
         </p>
       )}
 
-      <section aria-label="Journey" className="mb-6">
-        <JourneyGraph steps={w.steps} current={w.state} />
-        <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-3 rounded-sm bg-primary" /> Current state
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-3 rounded-sm border border-info/40 bg-info/10" /> Visited
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-3 rounded-sm border border-danger/50 bg-danger/12" /> Failed or blocked
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span aria-hidden className="size-3 rounded-sm border border-dashed" /> Not reached
-          </span>
-        </p>
-      </section>
+      <JourneyGraph steps={w.steps} current={w.state} />
 
-      <div className="mb-6 grid gap-6 lg:grid-cols-2">
-        <Panel title="Timeline" count={w.steps.length}>
+      <div className="grid items-start gap-[18px] [grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))]">
+        <section aria-label="Context" className={CARD}>
+          <Eyebrow>Context</Eyebrow>
+          <dl className="mt-2.5 grid grid-cols-[auto_1fr] gap-x-[18px]">
+            <Fact k="Customer" v={w.customer_name ?? "None"} />
+            <Fact k="Kind" v={humanize(w.kind.toUpperCase())} />
+            <Fact k="Transaction" v={short(w.transaction_id)} mono />
+            <Fact k="Conversation" v={short(w.conversation_id)} mono />
+            <Fact k="Agents involved" v={`${agentsInvolved.size} of 6`} />
+            <Fact k="Executions" v={w.executions.length} mono />
+            <Fact k="Messages" v={w.messages.length} mono />
+            <Fact k="Approvals" v={w.approvals.length} mono />
+          </dl>
+        </section>
+
+        <Section title="Timeline" count={w.steps.length}>
           {w.steps.length === 0 ? (
-            <EmptyState title="No transitions yet" />
+            <p className="py-3 text-[13px] text-t3">No transitions yet.</p>
           ) : (
-            <ol className="space-y-0 rounded-xl border bg-card">
+            <ol>
               {w.steps.map((s, i) => (
-                <li key={s.id} className="flex gap-3 border-b px-4 py-3 last:border-b-0">
-                  <span className="num w-6 shrink-0 pt-0.5 text-xs text-muted-foreground">{i + 1}</span>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      {s.from_state && <StatusBadge status={s.from_state} />}
-                      {s.from_state && <ArrowRight aria-label="to" className="size-3.5 text-muted-foreground" />}
-                      <StatusBadge status={s.to_state} />
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {s.agent_id && <span className="font-medium text-foreground">{AGENT_META[s.agent_id]?.name ?? s.agent_id}</span>}
+                <li key={s.id} className="flex items-start gap-3 border-t border-hair py-[11px]">
+                  <span className="num w-5 shrink-0 pt-2 text-right text-[11px] text-t4">{i + 1}</span>
+                  {s.agent_id ? (
+                    <Tile icon={agentMeta(s.agent_id).icon} size={32} radius={10} iconSize={15} {...agentColors(s.agent_id)} />
+                  ) : (
+                    <Tile icon={GitBranch} size={32} radius={10} iconSize={15} {...agentColors("orchestrator")} />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {s.from_state && (
+                        <>
+                          <StatusBadge status={s.from_state} size="sm" iconless className="font-extrabold" />
+                          <ArrowRight aria-label="to" className="size-3 text-t4" />
+                        </>
+                      )}
+                      <StatusBadge status={s.to_state} size="sm" className="font-extrabold" />
+                    </span>
+                    <span className="mt-1 block text-[12.5px] leading-[1.45] text-t3 [overflow-wrap:anywhere]">
+                      {s.agent_id && <span className="font-bold text-text">{agentMeta(s.agent_id).name}</span>}
                       {s.agent_id && s.note ? ": " : ""}
                       {s.note}
-                    </p>
-                  </div>
-                  <time className="num shrink-0 text-xs text-muted-foreground" dateTime={s.created_at} title={formatDateTime(s.created_at)}>
-                    {new Date(s.created_at).toLocaleTimeString("en-GB")}
+                    </span>
+                  </span>
+                  <time className="num shrink-0 text-[11px] whitespace-nowrap text-t3" dateTime={s.created_at} title={formatDateTime(s.created_at)}>
+                    {clock.format(new Date(s.created_at))}
                   </time>
                 </li>
               ))}
             </ol>
           )}
-        </Panel>
+        </Section>
 
-        <Panel title="Agent messages" count={w.messages.length}>
-          {w.messages.length === 0 ? <EmptyState title="No agent-to-agent messages" /> : <MessageThread messages={w.messages} />}
-        </Panel>
+        <Section title="Agent messages" count={w.messages.length}>
+          {w.messages.length === 0 ? <p className="py-3 text-[13px] text-t3">No agent-to-agent messages yet.</p> : <MessageThread messages={w.messages} />}
+        </Section>
       </div>
 
-      <div className="mb-6">
-        <Panel title="Agent executions" count={w.executions.length}>
-          <ExecutionList items={w.executions} showAgent showWorkflow={false} />
-        </Panel>
-      </div>
+      <section aria-label="Agent executions" className={cn(CARD, "overflow-hidden px-0 pb-0")}>
+        <div className="flex items-baseline justify-between px-5 pb-3">
+          <Eyebrow>Agent executions</Eyebrow>
+          <span className="num text-xs text-t3">{w.executions.length}</span>
+        </div>
+        <ExecutionTable items={w.executions} showAgent showWorkflow={false} bare />
+      </section>
 
       {w.approvals.length > 0 && (
-        <div className="mb-6">
-          <Panel title="Approvals" count={w.approvals.length}>
-            <ul className="divide-y rounded-xl border bg-card">
-              {w.approvals.map((a) => (
-                <li key={a.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <StatusBadge status={a.status} />
-                  <span className="num text-sm font-medium">{a.action}</span>
-                  <span className="min-w-0 flex-1 text-sm text-muted-foreground">{a.reason}</span>
-                  {a.transaction && <Money value={a.transaction.amount} className="text-sm" />}
-                  <Link href="/approvals" className="text-sm text-info-text underline-offset-4 hover:underline">
-                    Approval Center
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        </div>
+        <Section title="Approvals" count={w.approvals.length}>
+          <ul>
+            {w.approvals.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center gap-3 border-t border-hair py-[11px]">
+                <Tile icon={Hand} size={32} radius={10} iconSize={15} tone="warning" />
+                <StatusBadge status={a.status} />
+                <span className="num text-[13px] font-semibold">{a.action}</span>
+                <span className="min-w-0 flex-1 text-[12.5px] text-t3">{a.reason}</span>
+                {a.transaction && <Money value={a.transaction.amount} className="text-[13px]" />}
+                <Link href="/approvals" className="text-[12.5px] font-bold whitespace-nowrap">
+                  Approvals →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
       <JsonBlock value={w.context} label="Workflow context" />
@@ -182,21 +217,47 @@ export function WorkflowDetail({ id }: { id: string }) {
 }
 
 function MessageThread({ messages }: { messages: AgentMessage[] }) {
+  const [open, setOpen] = useState<string | null>(null);
   return (
-    <ol className="max-h-[560px] overflow-y-auto rounded-xl border bg-card">
-      {messages.map((m) => (
-        <li key={m.id} className="space-y-1 border-b px-4 py-3 last:border-b-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Who id={m.from_agent} />
-            <ArrowRight aria-label="to" className="size-4 text-muted-foreground" />
-            <Who id={m.to_agent} />
-            <span className="num ml-auto rounded-md border bg-muted px-1.5 py-0.5 text-xs">{m.message_type}</span>
-          </div>
-          <p className="num truncate text-xs text-muted-foreground" title={JSON.stringify(m.payload)}>
-            {compact(m.payload) || "no payload"}
-          </p>
-        </li>
-      ))}
+    <ol className="max-h-[560px] overflow-y-auto">
+      {messages.map((m) => {
+        const from = agentMeta(m.from_agent);
+        const to = agentMeta(m.to_agent);
+        const expanded = open === m.id;
+        return (
+          <li key={m.id} className="border-t border-hair">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              onClick={() => setOpen(expanded ? null : m.id)}
+              className="flex w-full items-start gap-3 py-[11px] text-left"
+            >
+              <span className="inline-flex shrink-0 items-center gap-1.5 pt-0.5">
+                <Tile icon={from.icon} size={26} radius={8} iconSize={13} {...agentColors(m.from_agent)} />
+                <ArrowRight aria-label="to" className="size-[13px] text-t4" />
+                <Tile icon={to.icon} size={26} radius={8} iconSize={13} {...agentColors(m.to_agent)} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13.5px] font-bold">
+                    {from.name} → {to.name}
+                  </span>
+                  <span className="num rounded-full bg-panel3 px-2 py-0.5 text-[10.5px] font-semibold text-t2">{m.message_type}</span>
+                </span>
+                <span className={cn("num mt-[3px] block text-xs text-t3", !expanded && "truncate")}>{compact(m.payload) || "no payload"}</span>
+              </span>
+              <time className="num shrink-0 text-[11px] whitespace-nowrap text-t3" dateTime={m.created_at} title={formatDateTime(m.created_at)}>
+                {clock.format(new Date(m.created_at))}
+              </time>
+            </button>
+            {expanded && (
+              <pre className="num anim-fade-in mb-3 max-h-72 overflow-auto rounded-xl border border-hair bg-panel2 px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap break-all">
+                {JSON.stringify(m.payload, null, 2)}
+              </pre>
+            )}
+          </li>
+        );
+      })}
     </ol>
   );
 }
@@ -215,13 +276,13 @@ function CancelControl({ id }: { id: string }) {
   });
   if (!confirming)
     return (
-      <Button variant="destructive" onClick={() => setConfirming(true)}>
-        Cancel workflow
+      <Button variant="destructive" className="h-10 rounded-xl px-4" onClick={() => setConfirming(true)}>
+        <X aria-hidden /> Cancel workflow
       </Button>
     );
   return (
-    <div role="group" aria-label="Confirm cancel" className="flex flex-wrap items-center gap-2 rounded-lg border border-danger/30 bg-danger/5 px-3 py-1.5">
-      <span className="text-sm">Stop this journey for good?</span>
+    <div role="group" aria-label="Confirm cancel" className="flex h-10 flex-wrap items-center gap-2 rounded-xl border border-danger/40 bg-danger-bg px-3">
+      <span className="text-[13px] font-semibold text-danger">Stop this journey for good?</span>
       <Button variant="destructive" size="sm" onClick={() => cancel.mutate()} disabled={cancel.isPending} autoFocus>
         {cancel.isPending ? "Cancelling" : "Yes, cancel"}
       </Button>

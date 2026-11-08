@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Pause, Play } from "lucide-react";
-import { AgentAvatar, AGENT_META, EmptyState, ErrorState, PageHeader } from "@/components/ui-kit";
+import { AGENT_META, agentColors, agentMeta, EmptyState, ErrorState, Eyebrow, PageTitle } from "@/components/ui-kit";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useEvents, type EventsStatus } from "@/hooks/use-events";
@@ -11,43 +11,29 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queries";
 import type { AppEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { AgentStatus } from "@/features/agents/agents-overview";
 import { useAgents } from "@/features/agents/hooks";
 import { useAgentPulse } from "@/features/agents/use-agent-pulse";
 import { EVENT_GROUPS, EventRow, eventGroup, type EventGroup } from "./event-row";
+import { FilterChip } from "./filter-chip";
 
 const AGENT_IDS = ["orchestrator", "sales", "intelligence", "payment", "analyst", "strategy", "security"];
+const CARD = "rounded-[22px] border border-hair bg-panel shadow-card";
 
 const CONN: Record<EventsStatus, { label: string; cls: string; dot: string }> = {
-  live: { label: "Live", cls: "border-success/30 bg-success/10 text-success-text", dot: "bg-success" },
-  polling: { label: "Polling every 4s", cls: "border-warning/30 bg-warning/15 text-warning-text", dot: "bg-warning" },
-  offline: { label: "Offline", cls: "border-danger/30 bg-danger/10 text-danger-text", dot: "bg-danger" },
+  live: { label: "WebSocket connected", cls: "bg-success-bg text-success", dot: "bg-[#3DCB8B] anim-live-pip" },
+  polling: { label: "Polling every 4s", cls: "bg-warning-bg text-warning", dot: "bg-warning" },
+  offline: { label: "Offline", cls: "bg-danger-bg text-danger", dot: "bg-danger" },
 };
 
+/** Prototype live pill: 36px, success tint, pulsing dot. */
 export function ConnectionBadge() {
   const { status } = useEvents();
   const c = CONN[status];
   return (
-    <span role="status" className={cn("inline-flex h-7 items-center gap-2 rounded-full border px-3 text-sm font-medium", c.cls)}>
-      <span aria-hidden className={cn("size-2 rounded-full", c.dot, status === "live" && "animate-pulse")} />
+    <span role="status" className={cn("inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold whitespace-nowrap", c.cls)}>
+      <span aria-hidden className={cn("size-2 rounded-full", c.dot)} />
       {c.label}
     </span>
-  );
-}
-
-function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm capitalize transition-colors duration-150 ease-out",
-        on ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-muted",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -92,42 +78,54 @@ export function ActivityFeed() {
 
   return (
     <>
-      <PageHeader
-        title="Live activity"
-        description="Every agent action, workflow move, payment and alert as it happens."
-        actions={<ConnectionBadge />}
-      />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <section aria-label="Event stream" className="min-w-0 space-y-3">
+      <PageTitle title="Live activity" description="Every agent action, workflow move, payment and alert as it happens." actions={<ConnectionBadge />} />
+      <div className="flex flex-wrap items-start gap-[18px]">
+        <section aria-label="Event stream" className="flex min-w-0 flex-[3_1_560px] flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-sm font-medium text-muted-foreground">Type</span>
+            <span className="eyebrow mr-1 font-extrabold">Type</span>
             {EVENT_GROUPS.map((g) => (
-              <Chip key={g} on={groups.has(g)} onClick={() => setGroups((s) => toggle(s, g))}>
+              <FilterChip key={g} size={32} on={groups.has(g)} onClick={() => setGroups((s) => toggle(s, g))} className="capitalize">
                 {g}
-              </Chip>
+              </FilterChip>
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-sm font-medium text-muted-foreground">Agent</span>
-            {AGENT_IDS.map((a) => (
-              <Chip key={a} on={agents.has(a)} onClick={() => setAgents((s) => toggle(s, a))}>
-                <AgentAvatar agentId={a} size="sm" className="-ml-2" />
-                {AGENT_META[a]?.name ?? a}
-              </Chip>
-            ))}
+            <span className="eyebrow mr-1 font-extrabold">Agent</span>
+            {AGENT_IDS.map((a) => {
+              const on = agents.has(a);
+              const Icon = agentMeta(a).icon;
+              return (
+                <FilterChip key={a} size={32} on={on} onClick={() => setAgents((s) => toggle(s, a))} className="pl-[5px]">
+                  <span
+                    aria-hidden
+                    className="grid size-[22px] place-items-center rounded-[7px]"
+                    style={on ? { background: "rgba(255,255,255,.15)", color: "var(--bg)" } : agentColors(a)}
+                  >
+                    <Icon className="size-3" strokeWidth={2.2} />
+                  </span>
+                  {AGENT_META[a]?.name ?? a}
+                </FilterChip>
+              );
+            })}
             {(groups.size > 0 || agents.size > 0) && (
-              <Button variant="ghost" size="sm" onClick={() => {
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
                   setGroups(new Set());
                   setAgents(new Set());
-                }}>
+                }}
+              >
                 Clear filters
               </Button>
             )}
           </div>
 
-          <div className="rounded-xl border bg-card">
-            <div className="flex items-center justify-between gap-2 border-b px-4 py-2">
-              <span className="num text-sm text-muted-foreground">{visible.length} events</span>
+          <div className={cn(CARD, "overflow-hidden")}>
+            <div className="flex items-center justify-between gap-2 px-[18px] py-2.5">
+              <span className="num text-[12.5px] text-t3">
+                {visible.length} events · newest first
+              </span>
               <div className="flex items-center gap-2">
                 {pending > 0 && (
                   <Button size="sm" onClick={() => setPausedAt(null)}>
@@ -137,10 +135,11 @@ export function ActivityFeed() {
                 <Button
                   variant="outline"
                   size="sm"
+                  className="h-[30px] rounded-[9px] text-[12.5px] text-t2"
                   onClick={() => setPausedAt((p) => (p === null ? (merged[0]?.id ?? 0) : null))}
                   aria-pressed={pausedAt !== null}
                 >
-                  {pausedAt === null ? <Pause aria-hidden /> : <Play aria-hidden />}
+                  {pausedAt === null ? <Pause aria-hidden className="size-3" strokeWidth={2.4} /> : <Play aria-hidden className="size-3" strokeWidth={2.4} />}
                   {pausedAt === null ? "Pause" : "Resume"}
                 </Button>
               </div>
@@ -155,9 +154,9 @@ export function ActivityFeed() {
                   ))}
                 </div>
               ) : visible.length === 0 ? (
-                <EmptyState title="No events match" description="Change the filters or run a demo scenario." className="m-4" />
+                <EmptyState title="No events match" description="Change the filters or run a scenario from Demo control." className="m-4" />
               ) : (
-                <ol className="divide-y" aria-live={pausedAt === null ? "polite" : "off"}>
+                <ol aria-live={pausedAt === null ? "polite" : "off"}>
                   {visible.map((e) => (
                     <EventRow key={e.id} e={e} fresh={e.id > historyMax} />
                   ))}
@@ -166,7 +165,10 @@ export function ActivityFeed() {
             </div>
           </div>
         </section>
-        <NowRunning />
+        <aside className="flex min-w-0 flex-[1_1_280px] flex-col gap-[18px]">
+          <NowRunning />
+          <LastHour events={merged} />
+        </aside>
       </div>
     </>
   );
@@ -177,31 +179,85 @@ function NowRunning() {
   const pulse = useAgentPulse();
   const active = (agents.data ?? []).filter((a) => a.status === "RUNNING" || pulse.running.has(a.id) || pulse.nodes.has(a.id));
   return (
-    <aside aria-label="Now running" className="h-fit rounded-xl border bg-card p-4 xl:sticky xl:top-20">
-      <h2 className="mb-3 font-semibold">Now running</h2>
+    <section aria-label="Now running" className={cn(CARD, "px-5 py-[18px]")}>
+      <Eyebrow>Now running</Eyebrow>
       {agents.isPending ? (
-        <Skeleton className="h-24 w-full" />
-      ) : active.length === 0 ? (
-        <p className="text-sm text-muted-foreground">All agents idle. Activity appears here the moment an agent is dispatched.</p>
+        <Skeleton className="mt-2.5 h-10 w-full" />
       ) : (
-        <ul className="space-y-3" aria-live="polite">
-          {active.map((a) => (
-            <li key={a.id} className="flex items-start gap-3">
-              <AgentAvatar agentId={a.id} />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{a.name}</p>
-                <AgentStatus agent={a} active />
-                {a.current_task && <p className="num mt-1 truncate text-xs text-muted-foreground">{a.current_task}</p>}
-              </div>
-            </li>
-          ))}
+        <ul className="mt-2.5 grid gap-2.5" aria-live="polite">
+          {active.map((a) => {
+            const m = agentMeta(a.id);
+            const Icon = m.icon;
+            return (
+              <li key={a.id} className="anim-row-in flex items-center gap-3">
+                <span className="relative grid size-[38px] shrink-0 place-items-center rounded-xl" style={agentColors(a.id)}>
+                  <Icon aria-hidden className="size-[17px]" strokeWidth={2} />
+                  <span aria-hidden className="anim-halo absolute -inset-[3px] rounded-[15px] border-2" style={{ borderColor: `var(${m.color})` }} />
+                </span>
+                <span className="min-w-0 leading-[1.2]">
+                  <span className="block text-sm font-extrabold">{m.full}</span>
+                  <span className="num mt-0.5 block truncate text-[11.5px]" style={{ color: `var(${m.color})` }}>
+                    {a.current_task ?? "dispatching"}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+          {active.length === 0 && <li className="text-[13px] text-t3">All agents idle. They light up the moment the orchestrator dispatches one.</li>}
         </ul>
       )}
       {pulse.last && (
-        <p className="mt-4 border-t pt-3 text-xs text-muted-foreground">
-          Latest: <span className="text-foreground">{pulse.last.summary}</span>
+        <p className="mt-3.5 border-t border-hair pt-3 text-xs text-t3">
+          Latest: <span className="text-text">{pulse.last.summary}</span>
         </p>
       )}
-    </aside>
+    </section>
+  );
+}
+
+const hhmm = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
+const BUCKETS = 24;
+const HOUR = 3_600_000;
+
+/** 24 bars (2.5 min each) over the last hour, computed from the events we hold; the current bucket is amber. */
+function LastHour({ events }: { events: AppEvent[] }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  const start = now - HOUR;
+  const bars = new Array<number>(BUCKETS).fill(0);
+  let alerts = 0;
+  let approvals = 0;
+  for (const e of events) {
+    if (e.type === "security.alert") alerts++;
+    if (e.type === "approval.requested") approvals++;
+    const t = new Date(e.created_at).getTime();
+    if (t >= start && t <= now) bars[Math.min(BUCKETS - 1, Math.floor(((t - start) / HOUR) * BUCKETS))]++;
+  }
+  const max = Math.max(1, ...bars);
+  return (
+    <section aria-label="Last hour" className={cn(CARD, "px-5 py-[18px]")}>
+      <Eyebrow>Last hour</Eyebrow>
+      <div className="mt-2.5 flex h-16 items-end gap-[3px]" aria-hidden>
+        {bars.map((v, i) => (
+          <span
+            key={i}
+            className={cn("flex-1 rounded-t-[3px] transition-[height] duration-500", i === BUCKETS - 1 ? "bg-brand" : "bg-panel3")}
+            style={{ height: `${Math.max(4, (v / max) * 100)}%` }}
+          />
+        ))}
+      </div>
+      <div className="tabular mt-1.5 flex justify-between text-[11px] text-t4">
+        <span>{hhmm.format(start)}</span>
+        <span>{hhmm.format(now - HOUR / 2)}</span>
+        <span>{hhmm.format(now)}</span>
+      </div>
+      <p className="mt-3 text-[13px] text-t2">
+        <span className="font-extrabold text-text">{events.length}</span> events · <span className="font-extrabold text-text">{alerts}</span> alerts ·{" "}
+        <span className="font-extrabold text-text">{approvals}</span> approvals requested
+      </p>
+    </section>
   );
 }

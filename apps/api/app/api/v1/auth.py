@@ -235,7 +235,7 @@ def forgot(body: ForgotIn, request: Request, db: Session = Depends(get_db)):
 
 class ResetIn(BaseModel):
     token: str = Field(min_length=20, max_length=200)
-    password: str = Field(min_length=10, max_length=200)
+    password: str = Field(min_length=8, max_length=200, pattern=r".*\d.*")  # >= 8 chars with a digit
 
 
 @router.post("/reset-password")

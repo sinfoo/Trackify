@@ -1,151 +1,101 @@
-"use client";
-
-import "@xyflow/react/dist/style.css";
-import { MarkerType, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
-import { useTheme } from "next-themes";
-import { humanize } from "@/components/ui-kit";
+import type { CSSProperties } from "react";
+import { Check, ChevronRight } from "lucide-react";
+import { Eyebrow, humanize } from "@/components/ui-kit";
 import type { WorkflowState, WorkflowStep } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import { pickHandles, SideHandles } from "@/features/agents/flow-handles";
 
-// Hand placed snake layout of docs/WORKFLOWS.md: row 0 sales, rows 2-4 payment, back along row 2 to completion.
-const COL = 215;
-const ROW = 110;
-const GRID: Record<WorkflowState, [number, number]> = {
-  NEW_CUSTOMER: [0, 0],
-  SALES_INTERACTION: [1, 0],
-  CUSTOMER_ANALYSIS: [2, 0],
-  PRODUCT_RECOMMENDATION: [3, 0],
-  ENROLLMENT_REQUEST: [4, 0],
-  LOW_INTENT: [2, 1],
-  PAYMENT_FAILED: [3, 1],
-  SECURITY_CHECK: [4, 2],
-  PAYMENT_SESSION: [5, 2],
-  PAYMENT_PROCESSING: [3, 2],
-  FINANCIAL_ANALYSIS: [2, 2],
-  BUSINESS_RECOMMENDATION: [1, 2],
-  COMPLETED: [0, 2],
-  AWAITING_APPROVAL: [4, 3],
-  BLOCKED: [5, 3],
-  CANCELLED: [4, 4],
-  ERROR: [0, 4],
+/** Happy path, in machine order (prototype WF_STATES). */
+const MAIN: WorkflowState[] = [
+  "NEW_CUSTOMER",
+  "SALES_INTERACTION",
+  "CUSTOMER_ANALYSIS",
+  "PRODUCT_RECOMMENDATION",
+  "ENROLLMENT_REQUEST",
+  "SECURITY_CHECK",
+  "PAYMENT_SESSION",
+  "PAYMENT_PROCESSING",
+  "AWAITING_APPROVAL",
+  "FINANCIAL_ANALYSIS",
+  "BUSINESS_RECOMMENDATION",
+  "COMPLETED",
+];
+/** Exits of the real 17-state machine (docs/WORKFLOWS.md). Shown on a second row. */
+const EXITS: WorkflowState[] = ["LOW_INTENT", "PAYMENT_FAILED", "BLOCKED", "CANCELLED", "ERROR"];
+const BAD = new Set<WorkflowState>(["PAYMENT_FAILED", "BLOCKED", "CANCELLED", "ERROR"]);
+
+type Look = "current" | "failed" | "visited" | "visited-bad" | "idle";
+
+const STYLE: Record<Look, CSSProperties> = {
+  current: { border: "1px solid var(--brand)", background: "var(--brand)", color: "var(--on-brand)", boxShadow: "0 0 0 4px var(--brand-bg)" },
+  failed: { border: "1px solid var(--danger)", background: "var(--danger-bg)", color: "var(--danger)", boxShadow: "0 0 0 4px var(--danger-bg)" },
+  visited: { border: "1px solid var(--hair2)", background: "var(--panel2)", color: "var(--text)" },
+  "visited-bad": { border: "1px solid var(--hair2)", background: "var(--danger-bg)", color: "var(--danger)" },
+  idle: { border: "1px dashed var(--hair2)", background: "transparent", color: "var(--t4)" },
 };
 
-const MACHINE: [WorkflowState, WorkflowState][] = [
-  ["NEW_CUSTOMER", "SALES_INTERACTION"],
-  ["SALES_INTERACTION", "CUSTOMER_ANALYSIS"],
-  ["CUSTOMER_ANALYSIS", "PRODUCT_RECOMMENDATION"],
-  ["CUSTOMER_ANALYSIS", "LOW_INTENT"],
-  ["CUSTOMER_ANALYSIS", "SALES_INTERACTION"],
-  ["LOW_INTENT", "SALES_INTERACTION"],
-  ["PRODUCT_RECOMMENDATION", "ENROLLMENT_REQUEST"],
-  ["ENROLLMENT_REQUEST", "SECURITY_CHECK"],
-  ["SECURITY_CHECK", "PAYMENT_SESSION"],
-  ["PAYMENT_SESSION", "SECURITY_CHECK"],
-  ["SECURITY_CHECK", "PAYMENT_PROCESSING"],
-  ["SECURITY_CHECK", "AWAITING_APPROVAL"],
-  ["SECURITY_CHECK", "BLOCKED"],
-  ["AWAITING_APPROVAL", "PAYMENT_PROCESSING"],
-  ["AWAITING_APPROVAL", "CANCELLED"],
-  ["PAYMENT_PROCESSING", "FINANCIAL_ANALYSIS"],
-  ["PAYMENT_PROCESSING", "PAYMENT_FAILED"],
-  ["PAYMENT_FAILED", "SECURITY_CHECK"],
-  ["FINANCIAL_ANALYSIS", "BUSINESS_RECOMMENDATION"],
-  ["BUSINESS_RECOMMENDATION", "COMPLETED"],
-];
-
-const BAD = new Set<WorkflowState>(["PAYMENT_FAILED", "BLOCKED", "ERROR"]);
-
-type StateData = { state: WorkflowState; visited: boolean; current: boolean; visits: number };
-
-function StateNode({ data }: NodeProps<Node<StateData>>) {
-  const bad = BAD.has(data.state);
+function Chip({ state, look, visits }: { state: WorkflowState; look: Look; visits: number }) {
   return (
-    <div
-      className={cn(
-        "flex h-11 w-[176px] items-center justify-center gap-1.5 rounded-lg border px-2 text-center text-xs font-medium",
-        !data.visited && "border-dashed bg-card text-muted-foreground",
-        data.visited && !bad && "border-info/40 bg-info/10 text-info-text",
-        data.visited && bad && "border-danger/50 bg-danger/12 text-danger-text",
-        data.current && !bad && "border-primary bg-primary text-primary-foreground ring-3 ring-primary/35",
-        data.current && bad && "border-danger bg-danger text-navy ring-3 ring-danger/35",
-      )}
-      aria-current={data.current ? "step" : undefined}
+    <span
+      aria-current={look === "current" || look === "failed" ? "step" : undefined}
+      className="inline-flex h-[30px] items-center gap-1.5 rounded-full px-[11px] text-[12.5px] font-bold whitespace-nowrap transition-[background-color,box-shadow] duration-300"
+      style={STYLE[look]}
     >
-      {humanize(data.state)}
-      {data.visits > 1 && <span className="num opacity-80">×{data.visits}</span>}
-      <SideHandles />
-    </div>
+      {look.startsWith("visited") && <Check aria-hidden className="size-3" strokeWidth={3} />}
+      {humanize(state)}
+      {visits > 1 && <span className="num opacity-70">×{visits}</span>}
+    </span>
   );
 }
 
-const nodeTypes = { state: StateNode };
+const Swatch = ({ look }: { look: Look }) => <span aria-hidden className="inline-block size-3 rounded-full" style={{ ...STYLE[look], boxShadow: "none" }} />;
 
+/**
+ * Journey chain (prototype "Journey" card): the 12 happy-path states as a horizontal chip chain plus the 5 exits.
+ * Visited / current come from the real `steps`, never from the state's index.
+ */
 export function JourneyGraph({ steps, current }: { steps: WorkflowStep[]; current: WorkflowState }) {
-  const { resolvedTheme } = useTheme();
-  const visits = new Map<string, number>();
-  const traversed = new Set<string>();
+  const visits = new Map<WorkflowState, number>();
   for (const s of steps) {
     visits.set(s.to_state, (visits.get(s.to_state) ?? 0) + 1);
-    if (s.from_state) {
-      if (!visits.has(s.from_state)) visits.set(s.from_state, 1);
-      traversed.add(`${s.from_state}>${s.to_state}`);
-    }
+    if (s.from_state && !visits.has(s.from_state)) visits.set(s.from_state, 1);
   }
   if (!visits.has(current)) visits.set(current, 1);
 
-  const nodes: Node<StateData>[] = (Object.keys(GRID) as WorkflowState[]).map((st) => ({
-    id: st,
-    type: "state",
-    position: { x: GRID[st][0] * COL, y: GRID[st][1] * ROW },
-    origin: [0.5, 0.5],
-    data: { state: st, visited: visits.has(st), current: st === current, visits: visits.get(st) ?? 0 },
-  }));
-
-  // ERROR and CANCELLED are reachable from anywhere: only draw those edges when actually taken.
-  const pairs = [...MACHINE];
-  for (const key of traversed) {
-    const [a, b] = key.split(">") as [WorkflowState, WorkflowState];
-    if (!pairs.some(([x, y]) => x === a && y === b) && GRID[a] && GRID[b]) pairs.push([a, b]);
-  }
-
-  const edges: Edge[] = pairs.map(([a, b]) => {
-    const on = traversed.has(`${a}>${b}`);
-    const bad = BAD.has(b);
-    const color = on ? (bad ? "var(--danger)" : "var(--info)") : "var(--border)";
-    const pa = { x: GRID[a][0], y: GRID[a][1] };
-    const pb = { x: GRID[b][0], y: GRID[b][1] };
-    // Return edges on the same row (analysis back to sales, or skipping a node): loop underneath, never through.
-    const loop = pa.y === pb.y && pb.x < pa.x && (pa.x - pb.x > 1 || pairs.some(([x, y]) => x === b && y === a));
-    return {
-      id: `${a}>${b}`,
-      source: a,
-      target: b,
-      ...pickHandles(pa, pb, loop),
-      type: loop ? "smoothstep" : "straight",
-      markerEnd: { type: MarkerType.ArrowClosed, color, width: 14, height: 14 },
-      style: { stroke: color, strokeWidth: on ? 2.25 : 1.25 },
-    };
-  });
+  const look = (st: WorkflowState): Look =>
+    st === current ? (BAD.has(st) ? "failed" : "current") : visits.has(st) ? (BAD.has(st) ? "visited-bad" : "visited") : "idle";
 
   return (
-    <div className="h-[460px] rounded-xl border bg-background">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        colorMode={resolvedTheme === "dark" ? "dark" : "light"}
-        fitView
-        fitViewOptions={{ padding: 0.08 }}
-        minZoom={0.3}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        zoomOnScroll={false}
-        preventScrolling={false}
-        style={{ background: "transparent" }}
-        aria-label="Customer journey state machine"
-      />
-    </div>
+    <section aria-label="Journey" className="rounded-[22px] border border-hair bg-panel px-5 py-[18px] shadow-card">
+      <Eyebrow>Journey</Eyebrow>
+      <ol className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-2">
+        {MAIN.map((st, i) => (
+          <li key={st} className="inline-flex items-center gap-1.5">
+            <Chip state={st} look={look(st)} visits={visits.get(st) ?? 0} />
+            {i < MAIN.length - 1 && <ChevronRight aria-hidden className="size-[13px] text-t4" />}
+          </li>
+        ))}
+      </ol>
+      <ol className="mt-2.5 flex flex-wrap items-center gap-x-1.5 gap-y-2" aria-label="Exit states">
+        <li className="eyebrow mr-1 text-[10.5px]">Exits</li>
+        {EXITS.map((st) => (
+          <li key={st}>
+            <Chip state={st} look={look(st)} visits={visits.get(st) ?? 0} />
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-t3">
+        <span className="inline-flex items-center gap-1.5">
+          <Swatch look="current" /> Current state
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Swatch look="visited" /> Visited
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Swatch look="failed" /> Failed or blocked
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Swatch look="idle" /> Not reached
+        </span>
+      </p>
+    </section>
   );
 }

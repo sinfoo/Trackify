@@ -1,85 +1,93 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
-import { AgentAvatar, ErrorState, PageHeader, StatusBadge, TimeAgo } from "@/components/ui-kit";
+import { ArrowRight, KeyRound } from "lucide-react";
+import { agentColors, agentMeta, ErrorState, Eyebrow, PageTitle, StatusBadge, Tile } from "@/components/ui-kit";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
+import { NEVER, type ActorId } from "@/lib/fixtures";
 import type { AgentView } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { CollaborationGraph } from "./collaboration-graph";
 import { displayStatus, useAgents } from "./hooks";
+import { OrchestrationCanvas } from "./orchestration-canvas";
+import { useScenarioClock } from "./scenario-clock";
 import { COMM_EDGES, useAgentPulse } from "./use-agent-pulse";
+
+/** Prototype "Message paths" (who talks to whom). Highlighted when the scenario step or a live event travels it. */
+const PATHS: [ActorId, ActorId, string][] = [
+  ["orchestrator", "security", "SCREEN_INPUT"],
+  ["orchestrator", "sales", "CUSTOMER_TURN"],
+  ["sales", "intelligence", "INTERACTION_RESULT"],
+  ["intelligence", "strategy", "CUSTOMER_INSIGHT"],
+  ["orchestrator", "payment", "CREATE_PAYMENT_SESSION"],
+  ["payment", "security", "ASSESS_PAYMENT / RISK_DECISION"],
+  ["payment", "analyst", "PAYMENT_RESULT"],
+  ["analyst", "strategy", "METRICS_UPDATED"],
+  ["payment", "human", "approval.request"],
+  ["human", "payment", "HUMAN_RELEASE"],
+];
 
 export function AgentStatus({ agent, active }: { agent: AgentView; active: boolean }) {
   const status = displayStatus(agent, active);
-  return (
-    <span className="inline-flex items-center gap-2">
-      {status === "RUNNING" && (
-        <span aria-hidden className="relative flex size-2">
-          <span className="absolute inline-flex size-full animate-ping rounded-full bg-info opacity-60" />
-          <span className="relative inline-flex size-2 rounded-full bg-info" />
-        </span>
-      )}
-      <StatusBadge status={status} label={status === "RUNNING" && agent.status !== "RUNNING" ? "Active now" : undefined} />
-    </span>
-  );
+  return <StatusBadge status={status} label={status === "RUNNING" ? "Running" : undefined} className="font-extrabold" />;
 }
 
-export function ToolChips({ tools, className }: { tools: string[]; className?: string }) {
-  return (
-    <ul className={cn("flex flex-wrap gap-1", className)} aria-label="Allowed tools">
-      {tools.map((t) => (
-        <li key={t} className="num rounded-md border bg-muted/60 px-1.5 py-0.5 text-xs text-muted-foreground">
-          {t}
-        </li>
-      ))}
-    </ul>
-  );
+/** Scenario clock + live events: the agents that act right now. */
+function useActiveAgents() {
+  const pulse = useAgentPulse();
+  const clock = useScenarioClock();
+  const active = new Set<string>([...pulse.running, ...pulse.nodes]);
+  active.add(clock.current.from);
+  active.add(clock.current.to);
+  return { active, pulse, clock };
 }
 
-function RosterRow({ agent, active }: { agent: AgentView; active: boolean }) {
+function AgentCard({ agent, active }: { agent: AgentView; active: boolean }) {
+  const m = agentMeta(agent.id);
+  const colors = agentColors(agent.id);
   const s = agent.stats ?? { succeeded: 0, failed: 0, avg_ms: 0 };
+  const provider = agent.provider ? `${agent.provider}${agent.model ? ` · ${agent.model}` : ""}` : "rules only";
+  const stats: [string, number, string][] = [
+    ["Succeeded", s.succeeded, "var(--success)"],
+    ["Failed", s.failed, s.failed ? "var(--danger)" : "var(--t3)"],
+    ["Avg ms", s.avg_ms, "var(--text)"],
+  ];
   return (
     <li>
       <Link
         href={`/agents/${agent.id}`}
-        className="grid gap-x-6 gap-y-3 px-4 py-4 transition-colors duration-150 ease-out hover:bg-muted/50 focus-visible:bg-muted/50 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.5fr)_auto] lg:items-center"
+        className="lift flex h-full flex-col gap-3.5 rounded-[22px] border bg-panel p-[18px] text-text no-underline shadow-card hover:no-underline hover:[transform:translateY(-3px)]"
+        style={active ? { borderColor: colors.color, boxShadow: `0 0 0 4px ${colors.background}` } : { borderColor: "var(--hair)" }}
       >
-        <div className="flex min-w-0 items-start gap-3">
-          <AgentAvatar agentId={agent.id} size="lg" />
-          <div className="min-w-0">
-            <p className="font-semibold">{agent.name}</p>
-            <p className="mt-0.5 line-clamp-2 text-sm text-muted-foreground">{agent.description}</p>
-          </div>
-        </div>
-        <div className="min-w-0 space-y-1">
+        <div className="flex items-center gap-3">
+          <span className="relative grid size-11 shrink-0 place-items-center rounded-[14px]" style={colors}>
+            <m.icon aria-hidden className="size-[22px]" strokeWidth={2} />
+            {active && <span aria-hidden className="anim-halo absolute -inset-1 rounded-[18px] border-2" style={{ borderColor: colors.color }} />}
+          </span>
+          <span className="min-w-0 flex-1 leading-[1.2]">
+            <span className="block text-base font-extrabold tracking-[-0.01em]">{m.full}</span>
+            <span className="num mt-[3px] block truncate text-xs text-t3">{provider}</span>
+          </span>
           <AgentStatus agent={agent} active={active} />
-          <p className="truncate text-sm text-muted-foreground">
-            {agent.current_task ? <span className="num">{agent.current_task}</span> : "No task in progress"}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Last run <TimeAgo date={agent.last_run_at} />
-          </p>
         </div>
-        <dl className="grid grid-cols-3 gap-2 text-sm lg:grid-cols-1 lg:gap-0.5">
-          <div className="flex gap-1.5">
-            <dt className="text-muted-foreground">OK</dt>
-            <dd className="num font-medium text-success-text">{formatNumber(s.succeeded)}</dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-muted-foreground">Failed</dt>
-            <dd className={cn("num font-medium", s.failed ? "text-danger-text" : "text-muted-foreground")}>
-              {formatNumber(s.failed)}
-            </dd>
-          </div>
-          <div className="flex gap-1.5">
-            <dt className="text-muted-foreground">Avg</dt>
-            <dd className="num font-medium">{formatNumber(s.avg_ms)} ms</dd>
-          </div>
+        <p className="text-[13.5px] leading-[1.5] text-t2">{agent.description}</p>
+        <dl className="grid grid-cols-3 gap-2">
+          {stats.map(([k, v, color]) => (
+            <div key={k} className="rounded-xl bg-panel2 px-2.5 py-2">
+              <dt className="text-[10.5px] font-bold tracking-[.06em] text-t4 uppercase">{k}</dt>
+              <dd className="tabular mt-0.5 text-base font-extrabold" style={{ color }}>
+                {formatNumber(v)}
+              </dd>
+            </div>
+          ))}
         </dl>
-        <ToolChips tools={agent.tools ?? []} />
-        <ChevronRight aria-hidden className="hidden size-4 text-muted-foreground lg:block" />
+        <ul className="flex flex-wrap gap-[5px]" aria-label="Allowed tools">
+          {(agent.tools ?? []).map((t) => (
+            <li key={t} className="num rounded-[7px] px-2 py-[3px] text-[11px]" style={colors}>
+              {t}
+            </li>
+          ))}
+        </ul>
       </Link>
     </li>
   );
@@ -87,84 +95,66 @@ function RosterRow({ agent, active }: { agent: AgentView; active: boolean }) {
 
 export function AgentsOverview() {
   const agents = useAgents();
-  const pulse = useAgentPulse();
+  const { active, pulse, clock } = useActiveAgents();
+  const cur = clock.current;
 
   return (
     <>
-      <PageHeader
+      <PageTitle
         title="Agents"
-        description="Six specialised agents coordinated by the orchestrator. Each one only reaches the tools it is allowed to."
+        description="Six specialised agents coordinated by the orchestrator. Each reaches only the tools it is allowed to; the gateway denies and logs anything else."
+        actions={
+          <span className="inline-flex min-h-9 max-w-[calc(100vw-32px)] items-center gap-2 rounded-full border border-hair bg-panel px-3.5 py-1.5 text-[12.5px] font-bold text-t2 [overflow-wrap:anywhere]">
+            <KeyRound aria-hidden className="size-3.5" />
+            Never granted: {NEVER.slice(0, 3).join(" · ")}
+          </span>
+        }
       />
 
-      <section aria-labelledby="roster-h" className="mb-8">
-        <h2 id="roster-h" className="sr-only">
-          Agent roster
-        </h2>
-        <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="hidden gap-x-6 border-b px-4 py-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1.5fr)_16px]">
-            <span>Agent</span>
-            <span>Status</span>
-            <span>Runs</span>
-            <span>Allowed tools</span>
-            <span />
-          </div>
-          {agents.error ? (
-            <ErrorState error={agents.error} onRetry={() => agents.refetch()} className="m-4" />
-          ) : agents.isPending ? (
-            <ul className="divide-y">
-              {Array.from({ length: 6 }, (_, i) => (
-                <li key={i} className="flex items-center gap-3 px-4 py-5">
-                  <Skeleton className="size-12" />
-                  <Skeleton className="h-4 w-64" />
+      {agents.error ? (
+        <ErrorState error={agents.error} onRetry={() => agents.refetch()} />
+      ) : (
+        <ul className="grid gap-3.5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))]" aria-label="Agent roster">
+          {agents.isPending
+            ? Array.from({ length: 6 }, (_, i) => (
+                <li key={i}>
+                  <Skeleton className="h-[236px] rounded-[22px]" />
                 </li>
-              ))}
-            </ul>
-          ) : (
-            <ul className="divide-y">
-              {agents.data.map((a) => (
-                <RosterRow key={a.id} agent={a} active={pulse.running.has(a.id) || pulse.nodes.has(a.id)} />
-              ))}
-            </ul>
-          )}
-        </div>
-      </section>
+              ))
+            : agents.data.map((a) => <AgentCard key={a.id} agent={a} active={active.has(a.id)} />)}
+        </ul>
+      )}
 
-      <section aria-labelledby="collab-h">
-        <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 id="collab-h" className="text-lg font-semibold">
-              How they collaborate
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Paths light up as live events arrive. Run a scenario from Demo control to watch a full journey.
-            </p>
-          </div>
-          <p className="min-h-5 truncate text-sm text-muted-foreground" aria-live="polite">
-            {pulse.last ? pulse.last.summary : "Waiting for agent activity"}
-          </p>
+      <section aria-label="How they collaborate" className="flex flex-wrap gap-5">
+        <div className="min-w-0 flex-[3_1_600px]">
+          <OrchestrationCanvas compact />
         </div>
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
-          <CollaborationGraph pulse={pulse} />
-          <div className="rounded-xl border bg-card p-4">
-            <h3 className="mb-2 text-sm font-semibold">Message paths</h3>
-            <ol className="space-y-1.5 text-sm">
-              {COMM_EDGES.map((e) => (
+        <aside className="min-w-0 flex-[1_1_300px] rounded-[26px] border border-hair bg-panel px-5 py-[18px] shadow-card">
+          <Eyebrow>Message paths</Eyebrow>
+          <h2 className="mt-0.5 text-[17px] font-extrabold">Who talks to whom</h2>
+          <ol className="mt-2.5">
+            {PATHS.map(([f, t, label]) => {
+              const edge = COMM_EDGES.find((e) => (e.source === f && e.target === t) || (e.source === t && e.target === f));
+              const on = (cur.from === f && cur.to === t) || (cur.from === t && cur.to === f) || (edge !== undefined && pulse.edges.has(edge.id));
+              return (
                 <li
-                  key={e.id}
-                  className={cn(
-                    "rounded-md px-2 py-1 transition-colors duration-200 ease-out",
-                    pulse.edges.has(e.id) && "bg-primary/15",
-                  )}
+                  key={label}
+                  className={cn("-mx-2.5 flex items-center gap-2.5 rounded-xl px-2.5 py-[9px] transition-colors duration-300", on && "bg-brand-bg")}
                 >
-                  <span className="font-medium capitalize">{e.source}</span>
-                  <span className="text-muted-foreground">{"both" in e ? " ⇄ " : " → "}</span>
-                  <span className="font-medium capitalize">{e.target === "human" ? "Human approver" : e.target}</span>
-                  <span className="num block text-xs text-muted-foreground">{e.label}</span>
+                  <Tile icon={agentMeta(f).icon} size={26} radius={8} iconSize={13} {...agentColors(f)} />
+                  <ArrowRight aria-hidden className="size-[13px] shrink-0 text-t4" />
+                  <Tile icon={agentMeta(t).icon} size={26} radius={8} iconSize={13} {...agentColors(t)} />
+                  <span className="min-w-0 flex-1 leading-[1.2]">
+                    <span className="block text-[13px] font-bold">
+                      {agentMeta(f).name} → {agentMeta(t).name}
+                    </span>
+                    <span className="num block text-[10.5px] text-t3">{label}</span>
+                  </span>
                 </li>
-              ))}
-            </ol>
-          </div>
-        </div>
+              );
+            })}
+          </ol>
+        </aside>
       </section>
     </>
   );
