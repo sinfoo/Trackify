@@ -541,7 +541,7 @@ function glow(s, cx, cy, r) {
     "Here is the demo you will see in a moment, in five steps. A customer chats with the assistant and enrols. Security holds the payment because it trips a risk rule. A human approves it from the console. The KPIs and the strategy recommendations refresh live on the orchestration canvas. And finally we send the injection attempt, and it is refused on the spot. Five steps, under two minutes, all on the real stack.");
   title(s, ["The demo, in ", { t: "five steps" }]);
   const steps = [
-    [C.sales, "A customer chats and enrols", "Public site: assistant recommends a program, simulated checkout starts."],
+    [C.sales, "A customer chats and enrols", "Public site: assistant recommends a program; a buyer account is created and the simulated checkout starts."],
     [C.security, "Security holds the payment", "Velocity rule trips: state goes to HELD, nothing is charged."],
     [C.amber, "A human approves", "Approval centre: a second person releases it, audit entry appended."],
     [C.analyst, "KPIs and strategy refresh live", "Orchestration canvas animates the hand-offs; forecast and recommendations update."],
@@ -554,19 +554,19 @@ function glow(s, cx, cy, r) {
     text(s, h, { x: M + 0.65, y: y - 0.02, w: 3.9, h: 0.28, fontSize: 13, bold: true });
     text(s, d, { x: M + 0.65, y: y + 0.27, w: 3.9, h: 0.42, fontSize: 9.5, color: C.body });
   });
-  // placeholder screenshot frame
+  // live console capture (1440x900 @2x) in a window frame; falls back to a wireframe when the capture is missing
   const fx = 5.25, fy = 1.35, fw = W - M - fx, fh = 3.65;
   card(s, fx, fy, fw, fh, { fill: C.panel, line: C.hair, lw: 1 });
   [C.danger, C.amber, C.success].forEach((c, i) => dot(s, fx + 0.3 + i * 0.2, fy + 0.2, 0.1, c));
   s.addShape(pres.shapes.LINE, { x: fx, y: fy + 0.4, w: fw, h: 0, line: { color: C.hair, width: 0.75 } });
-  // faint console wireframe
-  rrect(s, fx + 0.25, fy + 0.6, 1.0, 2.8, { fill: C.panel2, line: "none", r: 0.08 });
-  [0, 1, 2].forEach(i => rrect(s, fx + 1.4 + i * 0.95, fy + 0.6, 0.85, 0.6, { fill: C.panel2, line: "none", r: 0.08 }));
-  rrect(s, fx + 1.4, fy + 1.35, 2.75, 2.05, { fill: C.panel2, line: "none", r: 0.08 });
-  chain(s, fx + 1.75, fy + 2.35, AGENT_COLORS, 0.14, 0.2);
-  rrect(s, fx + 1.65, fy + 1.55, 2.25, 0.55, { fill: C.bg, line: C.hair, r: 0.08 });
-  mono(s, "Live demo screenshot", { x: fx + 1.65, y: fy + 1.55, w: 2.25, h: 0.35, align: "center", valign: "middle", fontSize: 11, bold: true, color: C.amberText });
-  mono(s, "swap for console capture", { x: fx + 1.65, y: fy + 1.85, w: 2.25, h: 0.22, align: "center", fontSize: 7.5, color: C.muted });
+  const SHOT = join(HERE, "assets", "dashboard.png");
+  if (existsSync(SHOT)) {
+    const iw = fw - 0.3, ih = fh - 0.7;
+    s.addImage({ path: SHOT, x: fx + 0.15, y: fy + 0.55, w: iw, h: ih, sizing: { type: "cover", x: fx + 0.15, y: fy + 0.55, w: iw, h: ih } });
+  } else {
+    rrect(s, fx + 1.65, fy + 1.55, 2.25, 0.55, { fill: C.bg, line: C.hair, r: 0.08 });
+    mono(s, "Live demo screenshot", { x: fx + 1.65, y: fy + 1.55, w: 2.25, h: 0.35, align: "center", valign: "middle", fontSize: 11, bold: true, color: C.amberText });
+  }
   footer(s);
 }
 
