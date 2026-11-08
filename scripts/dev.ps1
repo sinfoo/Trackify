@@ -7,10 +7,10 @@ switch ($Target) {
   "install" { Push-Location $api; uv sync; Pop-Location; Push-Location $web; npm install; Pop-Location }
   "seed"    { Push-Location $api; uv run alembic upgrade head; uv run python -m app.seed; Pop-Location }
   "reset"   { Push-Location $api; uv run alembic upgrade head; uv run python -m app.seed --reset; Pop-Location }
-  "api"     { Push-Location $api; uv run uvicorn app.main:app --reload --port 8000; Pop-Location }
+  "api"     { Push-Location $api; uv run uvicorn app.main:app --port 8000; Pop-Location }
   "web"     { Push-Location $web; npm run dev; Pop-Location }
   "dev"     {
-    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$api'; uv run uvicorn app.main:app --reload --port 8000"
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$api'; uv run uvicorn app.main:app --port 8000"
     Push-Location $web; npm run dev; Pop-Location
   }
   "test"    { Push-Location $api; uv run pytest -q; Pop-Location; Push-Location $web; npm test; Pop-Location }

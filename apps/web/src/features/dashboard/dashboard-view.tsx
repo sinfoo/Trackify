@@ -25,7 +25,7 @@ import { can } from "@/lib/permissions";
 import { qk, useMe, usePendingApprovalsCount } from "@/lib/queries";
 import type { AgentView, Paged, SecurityEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useConversion, useDefinitions, useOverview, useRevenue, useSnapshot } from "@/features/analytics/api";
+import { useConversion, useDefinitions, useFeedback, useForecast, useOverview, useRevenue, useSnapshot } from "@/features/analytics/api";
 import { PAYMENT_STATUSES } from "@/features/analytics/analytics-view";
 import { BarList, RevenueChart } from "@/features/analytics/charts";
 import { Panel } from "@/features/analytics/panel";
@@ -108,6 +108,7 @@ export function DashboardView() {
         )}
 
         {canAnalytics && <PaymentsAndObjections />}
+        {canAnalytics && <TrustAndOutlook />}
       </div>
     </>
   );
@@ -414,6 +415,75 @@ function PaymentsAndObjections() {
             };
           })}
         />
+      </Panel>
+    </>
+  );
+}
+
+function TrustAndOutlook() {
+  const o = useOverview();
+  const fb = useFeedback();
+  const fc = useForecast();
+  const types = Object.entries(o.data?.security_event_types ?? {}).sort((a, b) => b[1] - a[1]);
+  return (
+    <>
+      <Panel
+        title="Suspicious event types"
+        description="Detected by the Security & Fraud agent (rules and statistics)"
+        actions={<MoreLink href="/security">Security</MoreLink>}
+        q={o}
+        className="lg:col-span-5"
+      >
+        <BarList
+          color="var(--chart-4)"
+          items={types.map(([k, v]) => ({ key: k, label: label(k), value: v }))}
+          empty="No suspicious events"
+        />
+      </Panel>
+      <Panel
+        title="Customer feedback"
+        description={fb.data ? `${formatNumber(fb.data.count)} reviews after purchase` : undefined}
+        q={fb}
+        className="lg:col-span-4"
+      >
+        {fb.data && (
+          <div className="space-y-3">
+            <p>
+              <span className="num text-3xl font-semibold">{fb.data.average ?? "n/a"}</span>
+              <span className="text-sm text-muted-foreground"> / 5 average</span>
+            </p>
+            <BarList
+              items={["5", "4", "3", "2", "1"].map((r) => ({ key: r, label: `${r} stars`, value: fb.data.distribution[r] ?? 0 }))}
+            />
+            {fb.data.themes.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Themes in critical comments: {fb.data.themes.map((t) => `${label(t.theme)} (${t.count})`).join(", ")}
+              </p>
+            )}
+          </div>
+        )}
+      </Panel>
+      <Panel
+        title="Revenue forecast"
+        description="Next 7 days, linear trend model"
+        q={fc}
+        className="lg:col-span-3"
+      >
+        {fc.data && (
+          <div className="space-y-2">
+            {fc.data.points.length ? (
+              <>
+                <p className="num text-2xl font-semibold">
+                  <Money value={fc.data.total} currency="TND" />
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Fit R² <span className="num">{fc.data.r2 ?? "n/a"}</span> on {fc.data.history_days} days of history.
+                </p>
+              </>
+            ) : null}
+            <p className="text-xs text-muted-foreground">{fc.data.note}</p>
+          </div>
+        )}
       </Panel>
     </>
   );

@@ -81,6 +81,25 @@ export const usePaymentStats = (f: AnalyticsFilters = {}) => useA<PaymentsAnalyt
 export const useCustomerStats = (f: AnalyticsFilters = {}) => useA<CustomersAnalytics>("customers", f);
 export const useSecurityStats = (f: AnalyticsFilters = {}) => useA<SecurityAnalytics>("security", f);
 export const useAgentStats = (f: AnalyticsFilters = {}) => useA<AgentStat[]>("agents", f);
+export type Forecast = {
+  method: string;
+  history_days: number;
+  slope_per_day?: number;
+  r2: number | null;
+  points: { date: string; revenue: string }[];
+  total: string;
+  note: string;
+};
+export type FeedbackStats = {
+  count: number;
+  average: number | null;
+  distribution: Record<string, number>;
+  low_ratings: number;
+  negative_comments: number;
+  themes: { theme: string; count: number }[];
+};
+export const useForecast = () => useA<Forecast>("forecast", {});
+export const useFeedback = (f: AnalyticsFilters = {}) => useA<FeedbackStats>("feedback", f);
 export const useSnapshot = () => useA<Snapshot | null>("snapshots/latest", {});
 
 /** Metric definitions keyed like the overview fields. Never empty: local fallbacks fill gaps or a failed fetch. */

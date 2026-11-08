@@ -16,6 +16,8 @@ import {
   useConversion,
   useCustomerStats,
   useDefinitions,
+  useFeedback,
+  useForecast,
   useOverview,
   usePaymentStats,
   useProducts,
@@ -62,6 +64,8 @@ export function AnalyticsView() {
   const productStats = useProductStats(f);
   const payments = usePaymentStats(f);
   const customers = useCustomerStats(f);
+  const feedback = useFeedback(f);
+  const forecast = useForecast();
   const security = useSecurityStats(f);
   const agents = useAgentStats(f);
   const products = useProducts();
@@ -318,6 +322,52 @@ export function AnalyticsView() {
               display: `${i.count} · ${formatPercent(i.share, { fromRatio: false, digits: 0 })}`,
             }))}
           />
+        </Panel>
+      </div>
+
+      <h2 className="mb-3 text-lg font-semibold">Feedback and outlook</h2>
+      <div className="mb-6 grid gap-4 lg:grid-cols-3">
+        <Panel
+          title="Satisfaction"
+          description={feedback.data ? `${formatNumber(feedback.data.count)} reviews · average ${feedback.data.average ?? "n/a"} / 5` : undefined}
+          q={feedback}
+        >
+          <BarList
+            items={["5", "4", "3", "2", "1"].map((r) => ({ key: r, label: `${r} stars`, value: feedback.data?.distribution[r] ?? 0 }))}
+          />
+        </Panel>
+        <Panel
+          title="Themes in critical feedback"
+          description={feedback.data ? `${feedback.data.low_ratings} low ratings, ${feedback.data.negative_comments} negative comments` : undefined}
+          q={feedback}
+        >
+          <BarList
+            color="var(--chart-4)"
+            items={(feedback.data?.themes ?? []).map((t) => ({ key: t.theme, label: label(t.theme), value: t.count }))}
+            empty="No critical themes"
+          />
+        </Panel>
+        <Panel title="Revenue forecast, next 7 days" description={defs.forecast} q={forecast}>
+          {forecast.data && forecast.data.points.length > 0 ? (
+            <div className="space-y-2">
+              <p className="num text-2xl font-semibold">
+                <Money value={forecast.data.total} currency="TND" />
+              </p>
+              <BarList
+                items={forecast.data.points.map((p) => ({
+                  key: p.date,
+                  label: p.date.slice(5),
+                  value: Number(p.revenue),
+                  display: formatMoney(p.revenue, ""),
+                }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                R² <span className="num">{forecast.data.r2 ?? "n/a"}</span>. {forecast.data.note}
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">{forecast.data?.note}</p>
+          )}
         </Panel>
       </div>
 

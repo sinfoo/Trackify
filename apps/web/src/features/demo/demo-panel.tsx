@@ -110,6 +110,7 @@ export function DemoPanel() {
           </div>
         </section>
       </div>
+      <PrototypeLimits />
     </>
   );
 }
@@ -175,5 +176,58 @@ function ResetControl() {
         </div>
       )}
     </div>
+  );
+}
+
+const LIMITS: { title: string; items: string[] }[] = [
+  {
+    title: "Prototype limits",
+    items: [
+      "All customers, offers and payments are fictional. No real card data is ever requested.",
+      "Payments run on a simulated provider only; no live or sandbox gateway is connected.",
+      "Voice uses the browser speech engine (best in Chrome or Edge) and only after explicit consent.",
+      "Single server instance: live events and login rate limiting are kept in memory.",
+    ],
+  },
+  {
+    title: "Possible errors",
+    items: [
+      "Intent, sentiment and confidence are model or heuristic estimates, not verified facts.",
+      "The injection filter is pattern-based: it can miss a rephrased attack or flag an unusual question.",
+      "The revenue forecast is a linear trend on short simulated history.",
+      "With a real AI provider, wording can vary; prices, statuses and decisions never come from model text.",
+    ],
+  },
+  {
+    title: "Human supervision required",
+    items: [
+      "Releasing any payment held by the Security agent (velocity, failures, duplicates, high value).",
+      "Every refund, approved by a different administrator than the requester (four-eyes rule).",
+      "Price changes and offer bundles suggested by the Strategy agent.",
+      "Resolving security alerts and reviewing agent permission violations.",
+    ],
+  },
+];
+
+function PrototypeLimits() {
+  return (
+    <section aria-labelledby="limits-h" className="mt-8 rounded-xl border bg-card p-5 md:p-6">
+      <h2 id="limits-h" className="text-xl font-semibold">
+        What this prototype does not do on its own
+      </h2>
+      <p className="mt-1 text-muted-foreground">Stated openly so the agents are trusted for what they are.</p>
+      <div className="mt-5 grid gap-6 md:grid-cols-3">
+        {LIMITS.map((g) => (
+          <div key={g.title}>
+            <h3 className="font-semibold">{g.title}</h3>
+            <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+              {g.items.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
