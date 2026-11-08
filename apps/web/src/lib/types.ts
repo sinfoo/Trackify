@@ -267,6 +267,41 @@ export interface BusinessPublic {
   updated_at?: ISODate;
 }
 
+/** GET /public/conversations/{id}/account: the buyer hub behind /my. */
+export type ProgressState = "done" | "pending" | "held" | "failed" | "upcoming";
+export interface ProgressStep {
+  key: string;
+  label: string;
+  state: ProgressState;
+  detail?: string | null;
+}
+export interface BuyerEnrollment {
+  order_id: UUID;
+  order_reference: string;
+  order_status: string;
+  created_at: ISODate;
+  product: Pick<Offer, "id" | "slug" | "name" | "duration_weeks" | "level" | "category">;
+  amount: Money;
+  currency: Currency;
+  enrollment_status: string;
+  payment: {
+    transaction_reference: string;
+    status: string;
+    method: string | null;
+    paid_at: ISODate | null;
+    failure_reason: string | null;
+    session_id: UUID;
+    checkout_open: boolean;
+  } | null;
+  progress: ProgressStep[];
+}
+export interface BuyerAccount {
+  customer: { full_name: string | null; email: string | null };
+  recommended: (Offer & { recommended_at: ISODate; pitched: boolean })[];
+  enrollments: BuyerEnrollment[];
+  journey: Journey;
+}
+
 // ---------- Demo ----------
 export type DemoScenarioId =
   | "successful_journey"

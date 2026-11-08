@@ -14,7 +14,8 @@ describe("parseApiError", () => {
   });
   it("falls back for FastAPI detail and empty bodies", () => {
     expect(parseApiError(422, { detail: [{ loc: ["body"] }] }).code).toBe("VALIDATION_ERROR");
-    expect(parseApiError(500, undefined).code).toBe("HTTP_500");
+    expect(parseApiError(500, undefined).code).toBe("API_UNREACHABLE"); // bare 5xx = proxy could not reach the API
+    expect(parseApiError(500, { oops: true }).code).toBe("HTTP_500");
   });
 });
 
