@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.api.v1.common import iso, offer_out
 from app.core.errors import AppError, not_found
 from app.core.security import sha256
-from app.db.base import get_db
+from app.db.base import get_db, utcnow
 from app.models import Conversation, Customer, CustomerFeedback, Message, PaymentSession, Product, ProductStatus
 from app.orchestration import orchestrator
 from app.services import audit, payments
@@ -22,6 +22,30 @@ router = APIRouter(prefix="/public", tags=["public"])
 def msg_out(m: Message) -> dict:
     safe_meta = {k: v for k, v in (m.meta or {}).items() if k in ("products", "cta", "notice")}
     return {"id": str(m.id), "role": m.role, "content": m.content, "created_at": iso(m.created_at), "meta": safe_meta}
+
+
+def journey(db: Session, conv: Conversation) -> dict:
+    """Customer-safe journey state so the chat can disable stale Enroll buttons and offer resume."""
+    from app.models import Transaction, TxStatus
+
+    enrolled = [str(i) for i in orchestrator.enrolled_product_ids(db, conv.customer_id)]
+    open_tx = db.scalars(
+        select(Transaction).where(
+            Transaction.customer_id == conv.customer_id,
+            Transaction.status.in_([TxStatus.PENDING, TxStatus.FAILED, TxStatus.REQUIRES_APPROVAL]),
+        )
+    )
+    checkouts = [
+        {
+            "product_id": str(t.product_id),
+            "product_name": t.product.name,
+            "session_id": str(t.session_id),
+            "status": t.status,
+        }
+        for t in open_tx
+        if t.session.expires_at > utcnow()
+    ]
+    return {"enrolled_product_ids": enrolled, "open_checkouts": checkouts}
 
 
 def _conv(db: Session, conv_id: uuid.UUID, token: str | None) -> Conversation:
@@ -83,13 +107,22 @@ def start(body: StartIn, request: Request, db: Session = Depends(get_db)):
     )
     db.commit()
     db.refresh(conv)
-    return {"conversation_id": str(conv.id), "access_token": token, "messages": [msg_out(m) for m in conv.messages]}
+    return {
+        "conversation_id": str(conv.id),
+        "access_token": token,
+        "messages": [msg_out(m) for m in conv.messages],
+        "journey": journey(db, conv),
+    }
 
 
 @router.get("/conversations/{conv_id}")
 def get_conv(conv_id: uuid.UUID, x_conversation_token: str | None = Header(None), db: Session = Depends(get_db)):
     conv = _conv(db, conv_id, x_conversation_token)
-    return {"conversation_id": str(conv.id), "messages": [msg_out(m) for m in conv.messages]}
+    return {
+        "conversation_id": str(conv.id),
+        "messages": [msg_out(m) for m in conv.messages],
+        "journey": journey(db, conv),
+    }
 
 
 class MessageIn(BaseModel):
@@ -105,7 +138,7 @@ def post_message(
     orchestrator.handle_customer_message(db, conv, body.content)
     db.commit()
     db.refresh(conv)
-    return {"messages": [msg_out(m) for m in conv.messages if m.id not in before]}
+    return {"messages": [msg_out(m) for m in conv.messages if m.id not in before], "journey": journey(db, conv)}
 
 
 class EnrollIn(BaseModel):

@@ -213,9 +213,14 @@ export interface StartConversationResponse {
   access_token: string;
   messages: PublicMessage[];
 }
+export interface Journey {
+  enrolled_product_ids: UUID[];
+  open_checkouts: { product_id: UUID; product_name: string; session_id: UUID; status: string }[];
+}
 export interface ConversationMessagesResponse {
   conversation_id?: UUID;
   messages: PublicMessage[];
+  journey?: Journey;
 }
 export interface CheckoutSession {
   session_id: UUID;

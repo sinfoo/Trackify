@@ -52,7 +52,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
   useEffect(() => {
     if (!s) return;
     const r = s.transaction_reference ?? "";
-    if (s.status === "SUCCEEDED") router.replace(`/success?ref=${encodeURIComponent(r)}`);
+    if (s.status === "SUCCEEDED") router.replace(`/success?ref=${encodeURIComponent(r)}&session=${sessionId}`);
     else if (inReview && fresh && s.status === "FAILED")
       router.replace(`/payment-failed?session=${sessionId}&reason=${encodeURIComponent(s.failure_reason ? `Payment failed: ${humanize(s.failure_reason.toUpperCase()).toLowerCase()}.` : "Payment failed.")}`);
   }, [s, inReview, fresh, router, sessionId]);
@@ -67,7 +67,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
       keyRef.current = null;
       const tx = r.transaction_reference || s?.transaction_reference || "";
       if (r.status === "SUCCEEDED") {
-        router.push(`/success?ref=${encodeURIComponent(tx)}`);
+        router.push(`/success?ref=${encodeURIComponent(tx)}&session=${sessionId}`);
         return;
       }
       if (r.status === "FAILED") {
@@ -173,7 +173,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
               )}
               <Button type="submit" size="lg" className="mt-5 h-11 w-full px-4 sm:w-auto" disabled={!method || pending}>
                 {pending ? <Loader2 aria-hidden className="animate-spin" /> : <Lock aria-hidden />}
-                {pending ? "Processing" : <>Pay <Money value={s.amount} currency={s.currency} /></>}
+                {pending ? "Processing" : <>Pay <Money trim value={s.amount} currency={s.currency} /></>}
               </Button>
             </form>
           )}
@@ -198,7 +198,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
               <StatusBadge status={s.status} />
             </Row>
             <Row label="Total">
-              <Money value={s.amount} currency={s.currency} className="text-base font-semibold" />
+              <Money trim value={s.amount} currency={s.currency} className="text-base font-semibold" />
             </Row>
           </dl>
         </aside>

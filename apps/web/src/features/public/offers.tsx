@@ -89,7 +89,7 @@ export function OfferList({ limit }: { limit?: number }) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3 md:flex-col md:items-end">
-            <Money value={o.price} currency={o.currency} className="text-xl font-semibold" />
+            <Money trim value={o.price} currency={o.currency} className="text-xl font-semibold" />
             <div className="flex gap-2">
               <Button asChild variant="outline" size="lg" className="px-4">
                 <Link href={`/offers/${o.slug}`}>
@@ -163,7 +163,7 @@ export function OfferDetail({ slug }: { slug: string }) {
       </article>
 
       <aside aria-label="Enrollment" className="rounded-xl border bg-card p-5 lg:sticky lg:top-6">
-        <Money value={o.price} currency={o.currency} className="block text-3xl font-semibold" />
+        <Money trim value={o.price} currency={o.currency} className="block text-3xl font-semibold" />
         <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
           <div>
             <dt className="text-muted-foreground">Duration</dt>

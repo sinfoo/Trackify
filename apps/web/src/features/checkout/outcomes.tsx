@@ -6,12 +6,17 @@ import { CircleCheck, CircleX, Loader2, MessageCircle, RotateCcw, Star } from "l
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { SimulatedBadge } from "@/components/ui-kit";
+import { Money, SimulatedBadge } from "@/components/ui-kit";
+import type { CheckoutSession } from "@/lib/types";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { loadSession, publicApi, type StoredSession } from "@/features/public/api";
 
-export function SuccessView({ reference }: { reference?: string }) {
+export function SuccessView({ reference, session }: { reference?: string; session?: string }) {
+  const [receipt, setReceipt] = useState<CheckoutSession | null>(null);
+  useEffect(() => {
+    if (session) publicApi.checkout(session).then(setReceipt, () => setReceipt(null));
+  }, [session]);
   return (
     <div className="mx-auto grid max-w-2xl gap-8">
       <section className="rounded-xl border bg-card p-6 md:p-8">
@@ -25,10 +30,30 @@ export function SuccessView({ reference }: { reference?: string }) {
         <p className="mt-2 text-muted-foreground">
           The payment went through in the simulator and your seat is reserved. No real money moved.
         </p>
-        {reference && (
-          <p className="mt-4">
-            Transaction reference <span className="num font-semibold">{reference}</span>
-          </p>
+        {receipt ? (
+          <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-lg border bg-muted/40 p-4 text-sm">
+            <dt className="text-muted-foreground">Program</dt>
+            <dd className="font-medium">
+              {receipt.product.name}
+              <span className="font-normal text-muted-foreground">
+                {" "}· {receipt.product.duration_weeks} weeks · {receipt.product.level}
+              </span>
+            </dd>
+            <dt className="text-muted-foreground">Amount</dt>
+            <dd>
+              <Money trim value={receipt.amount} currency={receipt.currency} className="font-semibold" />
+            </dd>
+            <dt className="text-muted-foreground">Order</dt>
+            <dd className="num">{receipt.order_reference}</dd>
+            <dt className="text-muted-foreground">Transaction</dt>
+            <dd className="num">{reference ?? receipt.transaction_reference}</dd>
+          </dl>
+        ) : (
+          reference && (
+            <p className="mt-4">
+              Transaction reference <span className="num font-semibold">{reference}</span>
+            </p>
+          )
         )}
         <h2 className="mt-6 font-semibold">What happens next</h2>
         <ol className="mt-2 grid list-decimal gap-1 pl-5 text-muted-foreground">

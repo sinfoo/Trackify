@@ -19,14 +19,19 @@ export function normalizeDecimal(value: string | number, decimals = DECIMALS): s
 }
 
 /** formatMoney("1290.000", "TND") -> "1,290.000 TND" */
-export function formatMoney(value: string | number | null | undefined, currency = "TND"): string {
+export function formatMoney(
+  value: string | number | null | undefined,
+  currency = "TND",
+  opts: { trim?: boolean } = {},
+): string {
   if (value === null || value === undefined || value === "") return "-";
   const norm = normalizeDecimal(value);
   if (norm === null) return String(value);
   const neg = norm.startsWith("-");
   const [int, frac] = (neg ? norm.slice(1) : norm).split(".");
   const grouped = int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${neg ? "-" : ""}${grouped}.${frac}${currency ? ` ${currency}` : ""}`;
+  const tail = opts.trim && /^0*$/.test(frac ?? "") ? "" : `.${frac}`;
+  return `${neg ? "-" : ""}${grouped}${tail}${currency ? ` ${currency}` : ""}`;
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric" });

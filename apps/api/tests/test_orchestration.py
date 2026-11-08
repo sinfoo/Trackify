@@ -212,3 +212,40 @@ def test_llm_reply_grounded_in_catalog_is_used(client, monkeypatch):
     monkeypatch.setattr(providers, "_gemini", fake)
     conv_id, h = _start(client)
     assert _say(client, conv_id, h, "Is generative AI hard?")[-1]["content"].startswith("Not too hard")
+
+
+def _enroll(client, conv_id, h, pid):
+    return client.post(f"/api/v1/public/conversations/{conv_id}/enroll", json={"product_id": pid}, headers=h)
+
+
+def test_enroll_twice_reuses_checkout_and_blocks_after_payment(client, db):
+    conv_id, h = _start(client)
+    pid = str(product(db, "intro-ai").id)
+    db.rollback()
+    first = _enroll(client, conv_id, h, pid).json()["checkout_session_id"]
+    assert _enroll(client, conv_id, h, pid).json()["checkout_session_id"] == first  # no duplicate order
+    state = client.get(f"/api/v1/public/conversations/{conv_id}", headers=h).json()["journey"]
+    assert state["open_checkouts"][0]["session_id"] == first
+    assert _pay(client, first, "sim_card_success")["status"] == "SUCCEEDED"
+    r = _enroll(client, conv_id, h, pid)
+    assert r.status_code == 409 and r.json()["error"]["code"] == "ALREADY_ENROLLED"
+    state = client.get(f"/api/v1/public/conversations/{conv_id}", headers=h).json()["journey"]
+    assert state["enrolled_product_ids"] == [pid] and state["open_checkouts"] == []
+    reply = _say(client, conv_id, h, "I want to enroll in the introduction to ai")[-1]
+    assert "already enrolled" in reply["content"] and "cta" not in reply["meta"]
+
+
+def test_sales_recommends_from_profile_and_enrolls_what_it_pitched(client, db):
+    conv_id, h = _start(client)
+    first = _say(client, conv_id, h, "Hi, I work in marketing and never coded. Is AI for me?")[-1]
+    assert [p["slug"] for p in first["meta"]["products"]] == ["intro-ai"]
+    generic = _say(client, conv_id, h, "Thanks")[-1]
+    assert "products" not in generic["meta"]  # no unsolicited cards
+    buy = _say(client, conv_id, h, "OK I want to enroll")[-1]
+    assert buy["meta"]["cta"]["product_id"] == str(product(db, "intro-ai").id)
+
+
+def test_unrelated_message_gets_no_product_cards(client):
+    conv_id, h = _start(client)
+    reply = _say(client, conv_id, h, "What time zone are you in?")[-1]
+    assert "products" not in reply["meta"] and "cta" not in reply["meta"]

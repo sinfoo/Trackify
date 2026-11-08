@@ -24,6 +24,8 @@ from app.models import (
     ApprovalStatus,
     Conversation,
     Customer,
+    Enrollment,
+    EnrollmentStatus,
     Message,
     Order,
     PaymentSession,
@@ -381,11 +383,42 @@ def handle_customer_message(db: Session, conv: Conversation, text: str) -> list[
     return [msg, reply]
 
 
+def enrolled_product_ids(db: Session, customer_id) -> set[uuid.UUID]:
+    return set(
+        db.scalars(
+            select(Enrollment.product_id).where(
+                Enrollment.customer_id == customer_id, Enrollment.status == EnrollmentStatus.ACTIVE
+            )
+        )
+    )
+
+
+def open_checkout(db: Session, customer_id, product_id) -> PaymentSession | None:
+    return db.scalar(
+        select(PaymentSession)
+        .join(Transaction, Transaction.session_id == PaymentSession.id)
+        .where(
+            Transaction.customer_id == customer_id,
+            Transaction.product_id == product_id,
+            Transaction.status.in_([TxStatus.PENDING, TxStatus.FAILED, TxStatus.REQUIRES_APPROVAL]),
+            PaymentSession.expires_at > utcnow(),
+        )
+        .order_by(PaymentSession.created_at.desc())
+        .limit(1)
+    )
+
+
 def request_enrollment(db: Session, conv: Conversation, product_id: uuid.UUID) -> PaymentSession:
     wf = workflow_for(db, conv)
     product = db.get(Product, product_id)
     if not product:
         raise not_found("Offer")
+    if product.id in enrolled_product_ids(db, conv.customer_id):
+        raise conflict("ALREADY_ENROLLED", f"You are already enrolled in {product.name}.")
+    # Double click, or coming back later: reuse the customer's open checkout for this program.
+    reuse = open_checkout(db, conv.customer_id, product.id)
+    if reuse:
+        return reuse
     if wf.state not in (W.ENROLLMENT_REQUEST, W.PRODUCT_RECOMMENDATION):
         if wf.state in (W.BLOCKED, W.CANCELLED):
             raise conflict("CONVERSATION_CLOSED", "This conversation is closed")

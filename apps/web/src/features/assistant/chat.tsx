@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Info, Loader2, Mic, MicOff, RotateCcw, SendHorizontal, ShieldAlert, Volume2 } from "lucide-react";
+import { ArrowRight, Check, Clock, Info, Loader2, Mic, MicOff, RotateCcw, SendHorizontal, ShieldAlert, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +12,24 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { AgentAvatar, Money } from "@/components/ui-kit";
 import { ApiError } from "@/lib/api";
-import type { OfferCard, PublicMessage } from "@/lib/types";
+import type { Journey, OfferCard, PublicMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { BrowserSpeechAdapter, type ListenState } from "@/features/voice/adapter";
 import { clearSession, loadSession, publicApi, saveSession, type StoredSession } from "@/features/public/api";
+
+/** Follow-up suggestions that fit the conversation so far; never repeats what the customer already asked. */
+function suggestions(messages: PublicMessage[]): string[] {
+  const asked = new Set(messages.filter((m) => m.role === "customer").map((m) => m.content.trim().toLowerCase()));
+  const lastAgent = [...messages].reverse().find((m) => m.role === "agent");
+  const focus = lastAgent?.meta?.cta ? lastAgent.meta.products?.[0] ?? null : lastAgent?.meta?.products?.length === 1 ? lastAgent.meta.products[0] : null;
+  const pending = messages.some((m) => m.id.startsWith("pending-"));
+  const base = !asked.size
+    ? DEFAULT_CHIPS
+    : focus
+      ? [`What will I learn in ${focus.name}?`, "Can I pay in instalments?", "What is the weekly schedule?", "I want to enroll"]
+      : ["Which course fits a career switch?", "Show me all programs", "Is it too hard for a beginner?"];
+  return pending ? [] : base.filter((c) => !asked.has(c.toLowerCase()));
+}
 
 export const DEFAULT_CHIPS = [
   "Which course fits a career switch?",
@@ -45,6 +59,7 @@ type Phase = { kind: "loading" } | { kind: "start" } | { kind: "chat"; session: 
 export function AssistantChat({ extraChips, onSession, onReply, onCheckout, initialQuestion, className }: AssistantChatProps) {
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [messages, setMessages] = useState<PublicMessage[]>([]);
+  const [journey, setJourney] = useState<Journey | null>(null);
   const onSessionRef = useRef(onSession);
   useEffect(() => {
     onSessionRef.current = onSession;
@@ -63,6 +78,7 @@ export function AssistantChat({ extraChips, onSession, onReply, onCheckout, init
         const r = await publicApi.conversation(s);
         if (!alive) return;
         setMessages(r.messages);
+        setJourney(r.journey ?? null);
         setPhase({ kind: "chat", session: s });
         onSessionRef.current?.(s);
       } catch (e) {
@@ -88,6 +104,7 @@ export function AssistantChat({ extraChips, onSession, onReply, onCheckout, init
   const reset = () => {
     clearSession();
     setMessages([]);
+    setJourney(null);
     setPhase({ kind: "start" });
     onSession?.(null);
   };
@@ -106,6 +123,8 @@ export function AssistantChat({ extraChips, onSession, onReply, onCheckout, init
           session={phase.session}
           messages={messages}
           setMessages={setMessages}
+          journey={journey}
+          setJourney={setJourney}
           extraChips={extraChips}
           onReset={reset}
           onReply={onReply}
@@ -237,6 +256,8 @@ function ChatPane({
   session,
   messages,
   setMessages,
+  journey,
+  setJourney,
   extraChips,
   onReset,
   onReply,
@@ -246,6 +267,8 @@ function ChatPane({
   session: StoredSession;
   messages: PublicMessage[];
   setMessages: (fn: (m: PublicMessage[]) => PublicMessage[]) => void;
+  journey: Journey | null;
+  setJourney: (j: Journey | null) => void;
   extraChips?: AssistantChatProps["extraChips"];
   onReset: () => void;
   onReply?: () => void;
@@ -291,13 +314,24 @@ function ChatPane({
       if (!content || sending) return;
       setSending(true);
       setDraft("");
+      // Show the customer's message immediately; swap it for the server copy when the reply lands.
+      const tempId = `pending-${Date.now()}`;
+      setMessages((m) => [
+        ...m,
+        { id: tempId, role: "customer", content, created_at: new Date().toISOString(), meta: {} } as PublicMessage,
+      ]);
       try {
         const r = await publicApi.send(session, content);
-        setMessages((m) => [...m, ...r.messages.filter((x) => !m.some((y) => y.id === x.id))]);
+        setMessages((m) => [
+          ...m.filter((x) => x.id !== tempId),
+          ...r.messages.filter((x) => !m.some((y) => y.id === x.id)),
+        ]);
+        if (r.journey) setJourney(r.journey);
         const reply = [...r.messages].reverse().find((m) => m.role === "agent");
         if (reply && voiceOutRef.current) speech.speak(reply.content);
         onReply?.();
       } catch (e) {
+        setMessages((m) => m.filter((x) => x.id !== tempId));
         setDraft(content); // keep what the user typed
         if (e instanceof ApiError && e.status === 404) {
           toast.error("This conversation expired. Start a new one.");
@@ -308,7 +342,7 @@ function ChatPane({
         inputRef.current?.focus();
       }
     },
-    [sending, session, setMessages, speech, onReply, onReset],
+    [sending, session, setMessages, setJourney, speech, onReply, onReset],
   );
 
   const enroll = async (productId: string) => {
@@ -318,7 +352,10 @@ function ChatPane({
       if (onCheckout) onCheckout(checkout_session_id);
       else router.push(`/checkout/${checkout_session_id}`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not start enrollment. Try again.");
+      if (e instanceof ApiError && e.code === "ALREADY_ENROLLED") {
+        toast.success(e.message);
+        publicApi.conversation(session).then((r) => r.journey && setJourney(r.journey), () => {});
+      } else toast.error(e instanceof ApiError ? e.message : "Could not start enrollment. Try again.");
     } finally {
       setEnrolling(null);
     }
@@ -351,7 +388,7 @@ function ChatPane({
     }
   };
 
-  const chips = [...DEFAULT_CHIPS.map((c) => ({ label: c, text: c, tone: undefined })), ...(extraChips ?? [])];
+  const chips = [...suggestions(messages).map((c) => ({ label: c, text: c, tone: undefined })), ...(extraChips ?? [])];
   const voiceAllowed = !!session.consent_voice;
 
   return (
@@ -383,7 +420,7 @@ function ChatPane({
         className="flex min-h-64 flex-1 flex-col gap-4 overflow-y-auto px-4 py-5"
       >
         {messages.map((m) => (
-          <MessageRow key={m.id} m={m} onEnroll={enroll} enrolling={enrolling} />
+          <MessageRow key={m.id} m={m} onEnroll={enroll} enrolling={enrolling} journey={journey} />
         ))}
         {sending && (
           <div className="flex items-end gap-2" role="status" aria-label="The assistant is typing">
@@ -404,6 +441,7 @@ function ChatPane({
       </div>
 
       <div className="border-t px-4 pt-3 pb-4">
+        <JourneyBanner journey={journey} onResume={(id) => (onCheckout ? onCheckout(id) : router.push(`/checkout/${id}`))} />
         <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible" role="group" aria-label="Suggested questions">
           {chips.map((c) => (
             <button
@@ -495,10 +533,12 @@ function MessageRow({
   m,
   onEnroll,
   enrolling,
+  journey,
 }: {
   m: PublicMessage;
   onEnroll: (productId: string) => void;
   enrolling: string | null;
+  journey: Journey | null;
 }) {
   if (m.role === "system") {
     return (
@@ -539,12 +579,17 @@ function MessageRow({
             ))}
           </ul>
         )}
-        {cta?.type === "enroll" && (
-          <Button onClick={() => onEnroll(cta.product_id)} disabled={enrolling !== null} className="self-start">
-            {enrolling === cta.product_id ? <Loader2 aria-hidden className="animate-spin" /> : <ArrowRight aria-hidden />}
-            {cta.label}
-          </Button>
-        )}
+        {cta?.type === "enroll" &&
+          (journey?.enrolled_product_ids.includes(cta.product_id) ? (
+            <Button variant="outline" disabled className="self-start">
+              <Check aria-hidden /> Enrolled
+            </Button>
+          ) : (
+            <Button onClick={() => onEnroll(cta.product_id)} disabled={enrolling !== null} className="self-start">
+              {enrolling === cta.product_id ? <Loader2 aria-hidden className="animate-spin" /> : <ArrowRight aria-hidden />}
+              {journey?.open_checkouts.some((c) => c.product_id === cta.product_id) ? "Resume checkout" : cta.label}
+            </Button>
+          ))}
       </div>
     </div>
   );
@@ -559,10 +604,34 @@ function ProductCard({ p }: { p: OfferCard }) {
           <span className="num">{p.duration_weeks}</span> weeks · {p.level}
         </p>
       </div>
-      <Money value={p.price} currency={p.currency} className="font-semibold" />
+      <Money trim value={p.price} currency={p.currency} className="font-semibold" />
       <Link href={`/offers/${p.slug}`} className="text-sm font-medium text-info-text underline-offset-4 hover:underline">
         Details<span className="sr-only"> about {p.name}</span>
       </Link>
     </li>
+  );
+}
+
+function JourneyBanner({ journey, onResume }: { journey: Journey | null; onResume: (sessionId: string) => void }) {
+  const open = journey?.open_checkouts ?? [];
+  if (!open.length) return null;
+  return (
+    <ul className="mb-3 space-y-2" aria-label="Your checkouts">
+      {open.map((c) => {
+        const held = c.status === "REQUIRES_APPROVAL";
+        return (
+          <li key={c.session_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-muted/50 px-3 py-2 text-sm">
+            <Clock aria-hidden className="size-4 shrink-0 text-muted-foreground" />
+            <span className="mr-auto min-w-0">
+              {held ? "Security review in progress for " : c.status === "FAILED" ? "Payment not completed for " : "Checkout open for "}
+              <span className="font-medium">{c.product_name}</span>
+            </span>
+            <Button size="sm" variant={held ? "outline" : "default"} onClick={() => onResume(c.session_id)}>
+              {held ? "View status" : "Resume checkout"}
+            </Button>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

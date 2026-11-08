@@ -12,12 +12,15 @@ export function Money({
   value,
   currency = "TND",
   className,
+  trim,
 }: {
   value: string | number | null | undefined;
   currency?: string;
   className?: string;
+  /** Customer-facing: drop ".000" on whole amounts. */
+  trim?: boolean;
 }) {
-  return <span className={cn("num whitespace-nowrap", className)}>{formatMoney(value, currency)}</span>;
+  return <span className={cn("num whitespace-nowrap", className)}>{formatMoney(value, currency, { trim })}</span>;
 }
 
 /** Relative time that refreshes every 30s; full timestamp in the title and datetime attribute. */
