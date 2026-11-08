@@ -16,6 +16,10 @@ export class ApiError extends Error {
 
 /** Turn any non-OK response body into an ApiError. Accepts the contract envelope, FastAPI `detail`, or plain text. */
 export function parseApiError(status: number, body: unknown): ApiError {
+  // The Next.js rewrite answers with a bare 5xx (HTML/text) when the API is down or restarting.
+  if (status >= 502 || (status === 500 && typeof body !== "object")) {
+    return new ApiError(status, "API_UNREACHABLE", "Cannot reach the Trackify server. Try again in a few seconds.", {});
+  }
   if (body && typeof body === "object") {
     const b = body as Record<string, unknown>;
     const err = b.error as Record<string, unknown> | undefined;
@@ -101,7 +105,13 @@ export async function request<T>(method: string, path: string, body?: unknown, o
     body: body !== undefined ? JSON.stringify(body) : undefined,
   };
   const url = buildUrl(path, opts.query);
-  let res = await fetch(url, init);
+  let res: Response;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    throw new ApiError(0, "NETWORK_ERROR", "You appear to be offline. Check your connection and try again.", {});
+  }
 
   const canRefresh = !opts.noAuthRedirect && !NO_REFRESH.some((p) => path.startsWith(p));
   if (res.status === 401 && canRefresh) {
