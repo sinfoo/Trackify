@@ -1,5 +1,6 @@
-// Trackify pitch deck generator (12 slides, 16:9).
-// Run:   node build-deck.mjs            -> Trackify-pitch.pptx
+// Trackify pitch deck generator (16:9).
+// Run:   node build-deck.mjs            -> Trackify-pitch.pptx            (13 slides, 5-minute pitch)
+//        node build-deck.mjs --extended -> Trackify-pitch-extended.pptx   (27 slides, feature deep dive)
 // Deps:  npm i (pptxgenjs is the only dependency)
 // Assets: assets/wordmark.png (python make-wordmark.py) and the product mark.
 import pptxgen from "pptxgenjs";
@@ -8,7 +9,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const OUT = join(HERE, "Trackify-pitch.pptx");
+const EXT = process.argv.includes("--extended");
+const OUT = join(HERE, EXT ? "Trackify-pitch-extended.pptx" : "Trackify-pitch.pptx");
+const SHOTS = join(HERE, "..", "screenshots");
 const MARK = join(HERE, "..", "..", "design_handoff_trackify", "assets", "trackify-mark.png");
 const WORDMARK = join(HERE, "assets", "wordmark.png");
 const WORDMARK_RATIO = 1864 / 400;
@@ -37,7 +40,7 @@ const C = {
 };
 const F = { head: "Arial Black", body: "Segoe UI", mono: "Consolas" };
 const W = 10, H = 5.625, M = 0.5, GAP = 0.35;
-const TOTAL = 13;
+const TOTAL = EXT ? 27 : 13;
 let slideNo = 0;
 
 const pres = new pptxgen();
@@ -151,6 +154,32 @@ function wordmark(s, x, y, w) {
   else text(s, "Trackify", { x, y, w, h, fontFace: F.head, fontSize: w * 20, align: "center", valign: "middle" });
   return h;
 }
+
+// product screenshot in a window frame; crops (cover) to the frame
+function shot(s, name, x, y, w, h, o = {}) {
+  card(s, x, y, w, h, { fill: C.panel, line: o.line ?? C.hair, lw: 1 });
+  [C.danger, C.amber, C.success].forEach((c, i) => dot(s, x + 0.22 + i * 0.16, y + 0.16, 0.08, c));
+  s.addShape(pres.shapes.LINE, { x, y: y + 0.32, w, h: 0, line: { color: C.hair, width: 0.75 } });
+  const file = join(SHOTS, name + ".png");
+  const ix = x + 0.1, iy = y + 0.42, iw = w - 0.2, ih = h - 0.52;
+  if (existsSync(file)) s.addImage({ path: file, x: ix, y: iy, w: iw, h: ih, sizing: { type: "cover", x: ix, y: iy, w: iw, h: ih } });
+  else mono(s, name, { x: ix, y: iy, w: iw, h: ih, align: "center", valign: "middle", fontSize: 10, color: C.muted });
+}
+
+// bullet list with coloured dots
+function bullets(s, items, x, y, w, o = {}) {
+  const lh = o.lh ?? 0.42, size = o.size ?? 10.5;
+  items.forEach((it, i) => {
+    const [c, t] = Array.isArray(it) ? it : [o.color ?? C.amber, it];
+    const ry = y + i * lh;
+    dot(s, x + 0.07, ry + 0.14, 0.1, c);
+    text(s, t, { x: x + 0.25, y: ry, w: w - 0.25, h: lh, fontSize: size, color: o.textColor ?? C.body, valign: "top" });
+  });
+  return y + items.length * lh;
+}
+
+// section eyebrow under the title
+const eyebrow = (s, t) => mono(s, t, { x: M, y: 1.08, w: W - 2 * M, h: 0.2, fontSize: 8.5, bold: true, color: C.amberText, charSpacing: 3 });
 
 function glow(s, cx, cy, r) {
   // many faint rings, 1.5% opacity each, so the falloff reads as smooth rather than banded
@@ -282,6 +311,51 @@ function glow(s, cx, cy, r) {
     { text: "Risky branch: ", options: { bold: true, color: C.amberText } }, { text: "a person decides before any money moves.", options: { color: C.body } }],
     { x: M, y: hy, w: 4.7, h: hh, fontSize: 11, valign: "middle" });
   footer(s);
+}
+
+// ========== extended: product tour (after the journey) ==========
+if (EXT) {
+  // Two sides, one platform
+  {
+    const s = slide(
+      "Trackify has two faces, like Fiverr. A buyer sees a public site: programs, an assistant that answers by text or voice, a simulated checkout and a personal dashboard with everything bought. The business sees a console: live dashboard, workflows, studio, analytics, strategy, security, approvals and the audit log. One account can hold both sides: the owner switches between selling and buying with one click.");
+    title(s, ["Two sides, ", { t: "one platform" }]);
+    eyebrow(s, "PRODUCT TOUR");
+    const cw = (W - 2 * M - GAP) / 2;
+    shot(s, "buyer-dashboard", M, 1.4, cw, 2.45);
+    shot(s, "admin-dashboard", M + cw + GAP, 1.4, cw, 2.45);
+    text(s, "Buyer side", { x: M, y: 3.95, w: cw, h: 0.3, fontSize: 14, bold: true, color: C.amberText });
+    text(s, "Seller console", { x: M + cw + GAP, y: 3.95, w: cw, h: 0.3, fontSize: 14, bold: true, color: C.info });
+    bullets(s, ["Programs, assistant (text or voice), simulated checkout", "My dashboard: library, in arrival, receipts, recommendations", "Sign up in one step; a guest chat is attached to the account"], M, 4.27, cw, { lh: 0.27, size: 9.5, color: C.amber });
+    bullets(s, ["Dashboard, workflows, studio, customers, products, orders, payments", "Analytics, strategy, security, approvals, audit, settings, demo control", "Switch sides from the user menu: owners buy and sell"], M + cw + GAP, 4.27, cw, { lh: 0.27, size: 9.5, color: C.info });
+    footer(s);
+  }
+  // The buyer journey
+  {
+    const s = slide(
+      "Here is the buyer journey on screen. The assistant answers in English or French, by text or browser voice with consent; every reply is screened first and the right rail shows which agents worked on it. When the buyer clicks Enroll, a buyer account is required: one short sign-up, the conversation is attached, and the enrollment resumes by itself. Checkout is explicitly simulated: five fictional test methods, each triggering a different path through the agents, prices computed on the server.");
+    title(s, ["The ", { t: "buyer" }, " journey"]);
+    eyebrow(s, "PRODUCT TOUR");
+    const cw = (W - 2 * M - GAP) / 2;
+    shot(s, "public-assistant", M, 1.4, cw, 2.6);
+    shot(s, "public-checkout", M + cw + GAP, 1.4, cw, 2.6);
+    const steps = [[C.sales, "1  Chat", "EN or FR, text or voice. Screened before any model. Journey panel on the right."], [C.amber, "2  Enroll", "Buyer account required: one-step sign-up, guest chat attached, enrollment resumes."], [C.payment, "3  Pay (simulated)", "Five test methods: success, e-wallet, declined, insufficient funds, provider error."], [C.success, "4  Confirmed", "Receipt, progress tracker and the program in the library. No real email, no real money."]];
+    const sw = (W - 2 * M - 3 * 0.2) / 4;
+    steps.forEach(([c, h, b], i) => { const x = M + i * (sw + 0.2); rrect(s, x, 4.12, sw, 0.98, { r: 0.1 }); text(s, h, { x: x + 0.15, y: 4.2, w: sw - 0.3, h: 0.24, fontSize: 10.5, bold: true, color: c }); text(s, b, { x: x + 0.15, y: 4.46, w: sw - 0.3, h: 0.6, fontSize: 8.5, color: C.body }); });
+    footer(s);
+  }
+  // The buyer dashboard
+  {
+    const s = slide(
+      "After paying, the buyer is not left in the dark. The dashboard shows the library of programs bought with their learning outcomes, what is still in arrival with a five-step progress tracker that moves on its own when a held payment is released, every order with a printable receipt carrying the order and transaction references and the seller's legal identity, the programs the assistant recommended with a link to their details, and the profile with the linked conversations.");
+    title(s, ["The buyer ", { t: "dashboard" }]);
+    eyebrow(s, "PRODUCT TOUR");
+    shot(s, "buyer-dashboard", 4.55, 1.4, W - M - 4.55, 3.7);
+    const items = [[C.success, "Library: programs bought, outcomes, Open program, receipt"], [C.amber, "In arrival: pending or under review, 5-step tracker (order, payment, seat, welcome pack, cohort), polls while a payment is held"], [C.info, "Orders & receipts: order and transaction references, method, date, seller legal name and registration, printable"], [C.sales, "Recommended for you: what the assistant proposed, with program details and Enroll"], [C.body, "Profile: name, email, both-sides pills, linked conversations, switch to selling"]];
+    bullets(s, items, M, 1.45, 3.9, { lh: 0.68, size: 10 });
+    pill(s, M, 4.75, 2.6, 0.28, "NO REAL EMAIL, NO REAL MONEY", C.amber, { size: 8 });
+    footer(s);
+  }
 }
 
 // ---------- 6. Meet the team ----------
@@ -475,6 +549,121 @@ function glow(s, cx, cy, r) {
   footer(s);
 }
 
+// ========== extended: engine deep dives ==========
+if (EXT) {
+  // Payment state machine
+  {
+    const s = slide(
+      "The payment agent is a state machine, not a prompt. A transaction is created, becomes pending at checkout, is processed, and ends succeeded or failed. If the risk engine says hold, it goes to requires approval, and the only way out of that state is a human: release to processing or cancel. Succeeded can only move to refunded, again by a human. Every pay call carries an idempotency key, so a double click or a retry can never charge twice, and the price is recomputed on the server and compared with the agreed order.");
+    title(s, ["Payment ", { t: "state machine" }]);
+    eyebrow(s, "ENGINE");
+    const N = { CREATED: [0.78, 2.1], PENDING: [2.62, 2.1], PROCESSING: [4.3, 2.1], SUCCEEDED: [6.25, 1.5], FAILED: [6.25, 2.7], REQUIRES_APPROVAL: [4.3, 3.55], CANCELLED: [2.45, 3.55], REFUNDED: [8.2, 1.5] };
+    const col = { CREATED: C.body, PENDING: C.info, PROCESSING: C.info, SUCCEEDED: C.success, FAILED: C.danger, REQUIRES_APPROVAL: C.amber, CANCELLED: C.muted, REFUNDED: C.strategy };
+    const bw = 1.45, bh = 0.4;
+    const E = [["CREATED", "PENDING"], ["PENDING", "PROCESSING"], ["PROCESSING", "SUCCEEDED"], ["PROCESSING", "FAILED"], ["PENDING", "REQUIRES_APPROVAL"], ["FAILED", "PROCESSING"], ["FAILED", "REQUIRES_APPROVAL"], ["PENDING", "CANCELLED"], ["REQUIRES_APPROVAL", "PROCESSING", true], ["REQUIRES_APPROVAL", "CANCELLED", true], ["SUCCEEDED", "REFUNDED", true]];
+    const clip = (ux, uy) => (Math.abs(ux) > 0.7 ? [ux * (bw / 2 + 0.03), 0] : Math.abs(uy) > 0.7 ? [0, uy * (bh / 2 + 0.03)] : [ux * (bw / 2 + 0.03), uy * (bh / 2 + 0.03)]);
+    E.forEach(([a, b, human]) => {
+      const [ax, ay] = N[a], [bx, by] = N[b];
+      const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+      const [sx, sy] = clip(ux, uy), [ex, ey] = clip(-ux, -uy);
+      // bidirectional pairs (PROCESSING <-> FAILED) get a perpendicular offset so both arrows stay readable
+      const two = (a === "FAILED" && b === "PROCESSING") || (a === "PROCESSING" && b === "FAILED");
+      const k = two ? (a === "FAILED" ? 0.07 : -0.07) : 0, px = -uy * k, py = ux * k;
+      arrow(s, ax + sx + px, ay + sy + py, bx + ex + px, by + ey + py, { color: human ? C.amber : "4C5D85", w: human ? 1.75 : 1.25, dash: human ? "sysDash" : "solid" });
+    });
+    Object.entries(N).forEach(([k, [cx, cy]]) => { rrect(s, cx - bw / 2, cy - bh / 2, bw, bh, { fill: C.panel, line: col[k], lw: 1.1, r: 0.09 }); mono(s, k, { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh, align: "center", valign: "middle", fontSize: 8, bold: true, color: col[k] }); });
+    arrow(s, M, 4.28, M + 0.4, 4.28, { color: "4C5D85", w: 1.25 }); text(s, "agent transition", { x: M + 0.5, y: 4.16, w: 1.6, h: 0.24, fontSize: 9, color: C.body, valign: "middle" });
+    arrow(s, M + 2.2, 4.28, M + 2.6, 4.28, { color: C.amber, w: 1.75, dash: "sysDash" }); text(s, "human-only transition", { x: M + 2.7, y: 4.16, w: 2, h: 0.24, fontSize: 9, color: C.amberText, valign: "middle" });
+    const facts = [[C.payment, "Idempotency-Key on every pay call: a retry or a double click returns the same attempt, never a second charge"], [C.payment, "Price recomputed server-side at checkout and compared with the agreed order; a mismatch is a tampering flag"], [C.amber, "Out of REQUIRES_APPROVAL only by a person; SUCCEEDED to REFUNDED only by a person, four-eyes"], [C.body, "Five fictional methods, deterministic outcome per token; no PAN, CVV or bank credential exists in the system"]];
+    bullets(s, facts, M, 4.5, W - 2 * M, { lh: 0.19, size: 8.5 });
+    footer(s);
+  }
+  // Risk engine
+  {
+    const s = slide(
+      "The risk engine is deterministic and runs on every payment attempt. Six rules: three or more attempts in ten minutes, three or more failures in an hour, a duplicate of an open or recent transaction, an amount at or above two thousand dinars, an amount that differs from the agreed order, and a statistical outlier beyond three standard deviations of the paid history. Each flag has a weight; the score is a noisy-OR combination. Any critical flag blocks, any high flag or a score at or above 0.6 holds, high value or a duplicate holds, otherwise allow.");
+    title(s, ["Risk engine, ", { t: "rule by rule" }]);
+    eyebrow(s, "ENGINE");
+    const rows = [["PAYMENT_VELOCITY", "3+ attempts in 10 min", "HIGH", "0.70", C.danger], ["REPEATED_FAILURES", "3+ failed attempts in 1 h", "HIGH", "0.60", C.danger], ["DUPLICATE_TRANSACTION", "same customer, product and amount, open or recent", "HIGH", "0.60", C.danger], ["HIGH_VALUE", "amount >= 2,000 TND", "MEDIUM", "0.45", C.amber], ["AMOUNT_TAMPERING", "amount != agreed order total", "CRITICAL", "0.95", C.security], ["STATISTICAL_OUTLIER", "z-score > 3 vs paid history (n >= 10)", "MEDIUM", "0.40", C.amber]];
+    const cx = [M, M + 2.15, M + 5.45, M + 6.35], cw = [2.1, 3.25, 0.85, 0.6];
+    ["RULE", "TRIGGER", "SEVERITY", "WEIGHT"].forEach((h, i) => mono(s, h, { x: cx[i] + (i === 0 ? 0.1 : 0), y: 1.4, w: cw[i], h: 0.2, fontSize: 7.5, bold: true, color: C.muted }));
+    rows.forEach(([r, t, sev, w, c], i) => { const y = 1.68 + i * 0.4; rrect(s, M, y - 0.04, 6.55, 0.36, { fill: i % 2 ? C.panel : C.panel2, line: "none", r: 0.06 });
+      mono(s, r, { x: cx[0] + 0.1, y, w: cw[0], h: 0.28, fontSize: 8, bold: true, color: c, valign: "middle" });
+      text(s, t, { x: cx[1], y, w: cw[1], h: 0.28, fontSize: 9, color: C.body, valign: "middle" });
+      pill(s, cx[2], y + 0.02, 0.78, 0.24, sev, c, { size: 7 });
+      mono(s, w, { x: cx[3], y, w: cw[3], h: 0.28, fontSize: 9, color: C.white, valign: "middle" }); });
+    const dx = 7.35, dw = W - M - dx;
+    card(s, dx, 1.4, dw, 2.7, { line: C.payment, lw: 1 });
+    text(s, "Verdict", { x: dx + 0.2, y: 1.55, w: dw - 0.4, h: 0.3, fontSize: 13, bold: true, color: C.payment });
+    mono(s, "score = 1 - prod(1 - w_i)", { x: dx + 0.2, y: 1.9, w: dw - 0.4, h: 0.22, fontSize: 8.5, color: C.body });
+    [["BLOCK", "any CRITICAL flag", C.danger], ["HOLD", "any HIGH flag, score >= 0.6, high value or duplicate", C.amber], ["ALLOW", "otherwise, in milliseconds", C.success]].forEach(([v, d, c], i) => { const y = 2.25 + i * 0.58; pill(s, dx + 0.2, y, 0.8, 0.26, v, c, { size: 8 }); text(s, d, { x: dx + 0.2, y: y + 0.27, w: dw - 0.4, h: 0.3, fontSize: 8.5, color: C.body }); });
+    bullets(s, [[C.security, "A HOLD raises a security event and an approval request; nothing is charged while a human decides"], [C.body, "Thresholds are settings, not code: velocity window, attempts, failures, high-value amount, approval TTL (24 h)"], [C.body, "The LLM only explains a flag in plain words; it never sets, raises or lowers one"]], M, 4.2, W - 2 * M, { lh: 0.3, size: 9.5 });
+    footer(s);
+  }
+  // Prompt injection defence
+  {
+    const s = slide(
+      "Prompt injection is handled before the model, not by the model. A pattern classifier in English and French looks for override attempts, role changes, exfiltration and financial actions, with whole-word matching so innocent sentences pass. A score at or above 0.6 refuses the message: the assistant answers with a fixed safe reply, the attempt is logged as a security event, and no model call is made. On top of that, every model reply is validated against the catalogue before it is shown: no invented prices, no promised discounts. The security page has a tester, try it live.");
+    title(s, ["Injection ", { t: "stopped at the door" }]);
+    eyebrow(s, "ENGINE");
+    shot(s, "admin-security", 5.0, 1.4, W - M - 5.0, 3.7);
+    const flow = [[C.white, "Customer message"], [C.security, "Classifier (EN + FR, whole-word)"], [C.amber, "score >= 0.6 ?"], [C.danger, "REFUSED: safe reply, event logged, no model call"], [C.success, "clean: model may answer, reply validated against catalogue"]];
+    flow.forEach(([c, t], i) => { const y = 1.45 + i * 0.5; rrect(s, M, y, 4.2, 0.38, { fill: C.panel, line: c, lw: 1, r: 0.09 }); dot(s, M + 0.22, y + 0.19, 0.12, c); text(s, t, { x: M + 0.42, y, w: 3.7, h: 0.38, fontSize: 9.5, bold: i === 3 || i === 4, color: i === 0 ? C.white : c, valign: "middle" }); if (i < flow.length - 1) arrow(s, M + 2.1, y + 0.38, M + 2.1, y + 0.5, { color: "4C5D85", w: 1 }); });
+    bullets(s, [[C.security, "Categories: override, role change, exfiltration, financial action, system probing"], [C.body, "Submitted text is not stored; only the verdict goes to the audit log"], [C.body, "Model text can never change a verdict, a price, a state or a permission"]], M, 4.02, 4.3, { lh: 0.34, size: 9 });
+    footer(s);
+  }
+  // Workflow replay
+  {
+    const s = slide(
+      "Every customer journey is an explicit workflow with seventeen states: twelve on the path from new customer to completed, and five exits: low intent, payment failed, blocked, cancelled, error. The console replays any of them: the state path, the timeline with the agent behind each transition, and every agent-to-agent message with its type and payload. This is how a judge, an auditor or a developer answers the question 'why did the system do that' in under a minute.");
+    title(s, ["Every journey, ", { t: "replayable" }]);
+    eyebrow(s, "ENGINE");
+    shot(s, "admin-workflow-detail", M, 1.4, 5.6, 3.7);
+    const px = 6.35, pw = W - M - px;
+    text(s, "12 states on the path", { x: px, y: 1.42, w: pw, h: 0.26, fontSize: 11.5, bold: true, color: C.success });
+    mono(s, "NEW_CUSTOMER > SALES_INTERACTION > CUSTOMER_ANALYSIS > PRODUCT_RECOMMENDATION > ENROLLMENT_REQUEST > SECURITY_CHECK > PAYMENT_SESSION > PAYMENT_PROCESSING > (AWAITING_APPROVAL) > FINANCIAL_ANALYSIS > BUSINESS_RECOMMENDATION > COMPLETED", { x: px, y: 1.7, w: pw, h: 1.55, fontSize: 8, color: C.body });
+    text(s, "5 exits", { x: px, y: 3.3, w: pw, h: 0.26, fontSize: 11.5, bold: true, color: C.danger });
+    mono(s, "LOW_INTENT  PAYMENT_FAILED  BLOCKED  CANCELLED  ERROR", { x: px, y: 3.58, w: pw, h: 0.4, fontSize: 8, color: C.body });
+    bullets(s, [[C.info, "Timeline: who moved the state, when, and why"], [C.info, "Agent messages: typed payloads, never free text"], [C.amber, "Cancel workflow is a human action and is audited"]], px, 4.05, pw, { lh: 0.33, size: 9 });
+    footer(s);
+  }
+  // Studio and customer intelligence
+  {
+    const s = slide(
+      "The Studio puts a conversation side by side with what the Intelligence agent extracted from it: purchase intent on a zero-to-one scale, journey stage, sentiment, needs, motivations, objections in seven categories, and a suggested follow-up. Owners can also play the customer live from here. Every estimate is labelled as an estimate; the system never treats a model's confidence as a fact, and Strategy consumes these signals in aggregate.");
+    title(s, ["Studio: ", { t: "customer intelligence" }]);
+    eyebrow(s, "ENGINE");
+    shot(s, "admin-studio", M, 1.4, 5.9, 3.7);
+    const px = 6.65, pw = W - M - px;
+    const fields = [["purchase_intent", "0.00 to 1.00, labelled estimate"], ["journey_stage", "NEW, INTERESTED, CONSIDERATION, CUSTOMER..."], ["sentiment", "positive, neutral, negative"], ["needs / motivations", "short, structured phrases"], ["objections", "price, trust, time, information, relevance, difficulty, payment"], ["follow_up", "suggested next action for a human"]];
+    fields.forEach(([k, v], i) => { const y = 1.45 + i * 0.56; mono(s, k, { x: px, y, w: pw, h: 0.2, fontSize: 8.5, bold: true, color: C.intel }); text(s, v, { x: px, y: y + 0.2, w: pw, h: 0.28, fontSize: 8.5, color: C.body }); });
+    pill(s, px, 4.86, 2.3, 0.24, "FR AND EN UNDERSTOOD", C.intel, { size: 7.5 });
+    footer(s);
+  }
+  // Analytics and forecast
+  {
+    const s = slide(
+      "Analytics are computed by code, not by a model. Revenue, sales volume, successful, failed and pending payments, conversion, product performance and customer acquisition are recomputed from the database after every payment, in exact decimal arithmetic with three decimals, the millime. The seven-day forecast is an ordinary least-squares trend on the last thirty days of paid revenue, deterministic and explainable. The Analyst agent may interpret these numbers in words; it can never produce one.");
+    title(s, ["Analytics that ", { t: "add up" }]);
+    eyebrow(s, "ENGINE");
+    shot(s, "admin-analytics", 4.7, 1.4, W - M - 4.7, 3.7);
+    bullets(s, [[C.analyst, "Recomputed after every payment: revenue, volume, success / failed / pending, conversion, per-product and per-day series"], [C.analyst, "Decimal everywhere, 3 decimals (TND millimes); no floats on money"], [C.analyst, "7-day forecast: OLS trend on 30 days of SUCCEEDED revenue, with the fitted line shown"], [C.body, "Feedback analytics: thumbs on recommendations feed the next strategy run"], [C.body, "Snapshots stored per run so a judge can compare before and after a payment"]], M, 1.45, 4.0, { lh: 0.62, size: 10 });
+    pill(s, M, 4.6, 2.9, 0.28, "THE MODEL NEVER INVENTS A NUMBER", C.analyst, { size: 8 });
+    footer(s);
+  }
+  // Strategy
+  {
+    const s = slide(
+      "The Strategy agent turns intelligence and analytics into recommendations: pricing experiments, offer improvements, script changes, journey fixes, retention plays. Each one carries a title, evidence, the metrics behind it, expected impact, priority and confidence, and every line is tagged observed fact or hypothesis. Strategy cannot act: a price change becomes an approval request, applied only when a manager approves it, and the whole thing is in the audit log.");
+    title(s, ["Strategy that ", { t: "shows its work" }]);
+    eyebrow(s, "ENGINE");
+    shot(s, "admin-strategy", M, 1.4, 5.6, 3.7);
+    const px = 6.35, pw = W - M - px;
+    bullets(s, [[C.strategy, "Each recommendation: title, evidence, metrics, expected impact, priority, confidence, created at"], [C.success, "Observed facts (from the database) kept apart from hypotheses (from the model)"], [C.amber, "Price change = approval request (CHANGE_PRICE); applied only after a human approves"], [C.body, "Thumbs up or down on a recommendation is stored and improves the next run"], [C.body, "Refunds, releases and price changes: never from an agent, always via the approval centre"]], px, 1.45, pw, { lh: 0.68, size: 9.5 });
+    footer(s);
+  }
+}
+
 // ---------- 9. Human in the loop ----------
 {
   const s = slide(
@@ -509,6 +698,69 @@ function glow(s, cx, cy, r) {
   const bullets = [[C.amber, "Four-eyes rule: the person who requests a refund can never be the one who approves it."], [C.security, "Held payments and releases wait for a person and expire automatically if nobody decides."], [C.info, "Every agent and human action is appended, hashed and linked to the previous entry."]];
   bullets.forEach(([c, t], i) => { const ry = 3.5 + i * 0.52; dot(s, hx + 0.1, ry + 0.17, 0.12, c); text(s, t, { x: hx + 0.35, y: ry, w: W - M - hx - 0.35, h: 0.48, fontSize: 10.5, color: C.body }); });
   footer(s);
+}
+
+// ========== extended: platform ==========
+if (EXT) {
+  // Roles and accounts
+  {
+    const s = slide(
+      "Access is role-based with six staff roles and one buyer role. Super admin and admin run the platform, finance decides on money, security on alerts, sales on the catalogue, viewer reads. Buyers only see their own space. Passwords are hashed with Argon2, sessions are JWT cookies, login is rate-limited. Buying needs a buyer account: a guest conversation is attached, or merged, into the buyer's record at enrollment, and a checkout can only be paid by the account that owns it.");
+    title(s, ["Roles, accounts, ", { t: "least privilege" }]);
+    eyebrow(s, "PLATFORM");
+    const roles = [["SUPER_ADMIN", "everything, incl. settings; can also buy", C.amber], ["ADMIN", "operates the platform", C.amber], ["FINANCE_MANAGER", "payments, refunds, approvals on money", C.payment], ["SECURITY_ANALYST", "alerts, releases, injection tester", C.security], ["SALES_MANAGER", "catalogue, customers, studio", C.sales], ["VIEWER", "read-only, no users / audit / settings", C.body], ["BUYER", "own library, orders, receipts, recommendations", C.info]];
+    roles.forEach(([r, d, c], i) => { const y = 1.42 + i * 0.44; rrect(s, M, y, 5.0, 0.38, { fill: i % 2 ? C.panel : C.panel2, line: "none", r: 0.06 }); mono(s, r, { x: M + 0.15, y, w: 1.75, h: 0.38, fontSize: 8.5, bold: true, color: c, valign: "middle" }); text(s, d, { x: M + 1.95, y, w: 3.0, h: 0.38, fontSize: 9, color: C.body, valign: "middle" }); });
+    const px = 5.85, pw = W - M - px;
+    card(s, px, 1.4, pw, 3.1);
+    text(s, "Buyer accounts", { x: px + 0.2, y: 1.55, w: pw - 0.4, h: 0.3, fontSize: 13, bold: true, color: C.info });
+    bullets(s, [[C.info, "Public sign-up = BUYER; owner sign-up = SUPER_ADMIN + BUYER (both sides)"], [C.info, "Enroll as a guest: 401 BUYER_ACCOUNT_REQUIRED, sign in, conversation attached or merged, enrollment resumes"], [C.info, "Pay: only the account that owns the order (403 NOT_YOUR_ORDER otherwise)"], [C.body, "Argon2 passwords, JWT cookies, login rate limit, four-eyes on approvals"]], px + 0.2, 1.95, pw - 0.4, { lh: 0.6, size: 9 });
+    pill(s, px, 4.65, 2.4, 0.28, "7 ROLES, LEAST PRIVILEGE", C.info, { size: 8 });
+    footer(s);
+  }
+  // Model strategy
+  {
+    const s = slide(
+      "On the model side we are provider-agnostic: Gemini by default, Anthropic or OpenAI by configuration, and a built-in rules engine that needs no key at all. Calls time out at twenty seconds; a rate-limit answer opens a sixty-second circuit breaker; any failure falls back to the rules engine, so the demo never stalls. Model output is validated before it is shown: catalogue prices only, no promised discounts, plain text. Keys live on the server, never in the browser.");
+    title(s, ["Rules decide, ", { t: "the model speaks" }]);
+    eyebrow(s, "PLATFORM");
+    const prov = [["Rules engine", "no key, deterministic, always on", C.success], ["Gemini", "default, gemini-3.5-flash-lite", C.amber], ["Anthropic", "AI_PROVIDER=anthropic", C.info], ["OpenAI", "AI_PROVIDER=openai", C.info]];
+    const pw = (W - 2 * M - 3 * 0.2) / 4;
+    prov.forEach(([n, d, c], i) => { const x = M + i * (pw + 0.2); rrect(s, x, 1.4, pw, 0.9, { r: 0.1, line: c }); text(s, n, { x: x + 0.15, y: 1.5, w: pw - 0.3, h: 0.3, fontSize: 12, bold: true, color: c }); mono(s, d, { x: x + 0.15, y: 1.85, w: pw - 0.3, h: 0.35, fontSize: 8, color: C.body }); });
+    text(s, "every provider falls back to the rules engine", { x: M, y: 2.36, w: 5, h: 0.24, fontSize: 8.5, color: C.success, valign: "middle" });
+    const cw = (W - 2 * M - GAP) / 2;
+    card(s, M, 2.7, cw, 2.4); card(s, M + cw + GAP, 2.7, cw, 2.4);
+    text(s, "Resilience", { x: M + 0.2, y: 2.85, w: cw, h: 0.3, fontSize: 13, bold: true, color: C.amberText });
+    bullets(s, [[C.amber, "20 s timeout per call, server errors retried"], [C.amber, "HTTP 429: 60 s circuit breaker, straight to rules"], [C.amber, "Any exception, refusal or invalid JSON: rules result"], [C.amber, "Demo never stalls on a missing or exhausted key"]], M + 0.2, 3.22, cw - 0.4, { lh: 0.4, size: 9.5 });
+    text(s, "Containment", { x: M + cw + GAP + 0.2, y: 2.85, w: cw, h: 0.3, fontSize: 13, bold: true, color: C.security });
+    bullets(s, [[C.security, "Reply validated: catalogue prices only, no discounts, plain text"], [C.security, "No model call before the injection screen passes"], [C.security, "Model output never sets state, price, risk or permission"], [C.security, "Keys only in the server .env; browser sees nothing"]], M + cw + GAP + 0.2, 3.22, cw - 0.4, { lh: 0.4, size: 9.5 });
+    footer(s);
+  }
+  // Architecture
+  {
+    const s = slide(
+      "Architecture. A Next.js 16 front end talks to a FastAPI back end through a single API prefix and a WebSocket for live events. Inside the API: the orchestrator, the six agents behind the tool gateway, the services for payments, risk, approvals, analytics, audit and events, SQLAlchemy models with Alembic migrations, SQLite in development and PostgreSQL in Docker. The LLM layer is a thin adapter. Everything is one repository, one command to run.");
+    title(s, ["Architecture and ", { t: "stack" }]);
+    eyebrow(s, "PLATFORM");
+    const layers = [["Browser", "buyer site, buyer dashboard, seller console; dark + light; 390 to 1440", C.white], ["Next.js 16, React 19, TS strict, Tailwind 4, shadcn, TanStack Query, Recharts", "/api/v1 rewrite + WebSocket /ws/events", C.info], ["FastAPI + Pydantic", "REST + WS routes: public, me, admin; RBAC dependency on every route", C.amber], ["Orchestrator + 6 agents + tool gateway", "typed messages, allow-lists, retries, audit", C.sales], ["Services", "payments (state machine), risk, approvals, analytics, audit (hash chain), events (bus), buyers, business", C.payment], ["SQLAlchemy 2 + Alembic", "SQLite in dev, PostgreSQL in Docker Compose; 3 migrations", C.analyst], ["LLM adapters", "mock, gemini, anthropic, openai; circuit breaker; fallback", C.strategy]];
+    layers.forEach(([h, d, c], i) => { const y = 1.4 + i * 0.5; rrect(s, M, y, 6.1, 0.42, { fill: C.panel, line: c, lw: 0.9, r: 0.08 }); text(s, h, { x: M + 0.15, y, w: 2.6, h: 0.42, fontSize: 8.5, bold: true, color: c, valign: "middle" }); text(s, d, { x: M + 2.8, y, w: 3.2, h: 0.42, fontSize: 8, color: C.body, valign: "middle" }); });
+    const px = 6.85, pw = W - M - px;
+    card(s, px, 1.4, pw, 3.7);
+    mono(s, ["apps/api/app", "  agents/        6 agents + gateway", "  orchestration/ workflow engine", "  services/      payments, risk,", "                 approvals, analytics,", "                 audit, events, buyers", "  llm/           providers + fallback", "  api/v1/        public, me, admin", "  models/ + migrations/", "", "apps/web/src", "  app/(public) (app) (auth)", "  features/    one per screen", "  components/  shell, ui-kit"].join("\n"), { x: px + 0.15, y: 1.5, w: pw - 0.3, h: 3.5, fontSize: 7.5, color: C.body });
+    footer(s);
+  }
+  // Quality and delivery
+  {
+    const s = slide(
+      "Quality is not a slide, it is the test suite. One hundred thirty-seven backend tests cover the agents, the state machine, the risk rules, approvals and four-eyes, RBAC, the audit chain, buyer accounts and the public API. Forty-one front-end unit tests and six Playwright journeys cover the UI, including the buyer gate and a held payment. CI runs on every push. Migrations are Alembic, the stack runs locally with one command and in Docker Compose with PostgreSQL. The agents page shows each agent's charter, tools, executions and refusals.");
+    title(s, ["Quality and ", { t: "delivery" }]);
+    eyebrow(s, "PLATFORM");
+    const stats = [["137", "backend tests", C.success], ["41", "web unit tests", C.info], ["6", "Playwright journeys", C.amber], ["3", "Alembic migrations", C.analyst]];
+    const sw = (4.6 - 3 * 0.15) / 4;
+    stats.forEach(([n, l, c], i) => { const x = M + i * (sw + 0.15); rrect(s, x, 1.4, sw, 1.0, { r: 0.1 }); mono(s, n, { x, y: 1.46, w: sw, h: 0.55, align: "center", fontSize: 26, bold: true, color: c }); text(s, l, { x, y: 2.02, w: sw, h: 0.3, align: "center", fontSize: 8, color: C.body }); });
+    bullets(s, [[C.success, "pytest: agents, state machine, risk, approvals (four-eyes), RBAC, audit chain, buyers, public API"], [C.info, "Vitest: forms, tables, trackers, api error mapping; Playwright: login, guard, buyer gate, held payment, injection, RBAC"], [C.amber, "GitHub Actions on every push: pytest, tsc, unit tests; ruff + eslint clean"], [C.body, "One command locally (SQLite, rules engine); docker compose up for PostgreSQL + API + web"], [C.body, "Verify integrity recomputes the audit hash chain on demand"]], M, 2.6, 4.6, { lh: 0.5, size: 9 });
+    shot(s, "admin-agents", 5.35, 1.4, W - M - 5.35, 3.7);
+    footer(s);
+  }
 }
 
 // ---------- 10. Impact ----------
@@ -573,7 +825,7 @@ function glow(s, cx, cy, r) {
 // ---------- 12. Conclusion ----------
 {
   const s = slide(
-    "To close: Trackify is an AI team that sells, collects and analyses on its own, and can never move money without a human. Today it is a full stack: FastAPI and PostgreSQL in the back, Next.js in the front, 130 backend tests and Playwright end-to-end coverage. Next we plug in a real sandbox gateway, scale the bus on Redis, and open it to other verticals beyond training. Thank you. The repo and the live demo link are on the last line. Questions?");
+    "To close: Trackify is an AI team that sells, collects and analyses on its own, and can never move money without a human. Today it is a full stack: FastAPI and PostgreSQL in the back, Next.js in the front, 137 backend tests and Playwright end-to-end coverage. Next we plug in a real sandbox gateway, scale the bus on Redis, and open it to other verticals beyond training. Thank you. The repo and the live demo link are on the last line. Questions?");
   mono(s, "CONCLUSION", { x: M, y: 0.42, w: 3, h: 0.22, fontSize: 9, bold: true, color: C.amberText, charSpacing: 3 });
   s.addText([
     { text: "Trackify: an AI team that sells, collects and analyses on its own, " },
@@ -581,7 +833,7 @@ function glow(s, cx, cy, r) {
   ], { x: M, y: 0.72, w: W - 2 * M, h: 1.75, fontFace: F.head, fontSize: 28, color: C.white, margin: 0, valign: "top" });
   const cw = (W - 2 * M - 2 * GAP) / 3, cy = 2.55, ch = 1.7;
   const boxes = [
-    [C.success, "Built today", "Full stack, tested: FastAPI, SQLAlchemy and PostgreSQL behind Next.js 16 and React 19. 130 backend tests, Playwright E2E, seeded demo business."],
+    [C.success, "Built today", "Full stack, tested: FastAPI, SQLAlchemy and PostgreSQL behind Next.js 16 and React 19. 137 backend tests, Playwright E2E, seeded demo business."],
     [C.info, "What is next", "Real sandbox payment gateway, Redis-backed message bus for scale, and new verticals beyond training."],
     [C.amber, "Thank you", "Questions welcome. The repo and the live demo are one line below; everything shown runs locally with one command."],
   ];

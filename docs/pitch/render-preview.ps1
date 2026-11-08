@@ -1,14 +1,15 @@
-# Renders Trackify-pitch.pptx to preview/slide-NN.png using the installed PowerPoint.
-# Usage: powershell -ExecutionPolicy Bypass -File render-preview.ps1
+# Renders a deck to <preview dir>/slide-NN.png using the installed PowerPoint.
+# Usage: powershell -ExecutionPolicy Bypass -File render-preview.ps1 [-Deck Trackify-pitch] 
+param([string]$Deck = "Trackify-pitch")
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
-$pptx = Join-Path $here "Trackify-pitch.pptx"
-$out = Join-Path $here "preview"
-$lock = Join-Path $here '~$Trackify-pitch.pptx'
+$pptx = Join-Path $here "$Deck.pptx"
+$out = Join-Path $here ($(if ($Deck -eq "Trackify-pitch") { "preview" } else { "preview-" + ($Deck -replace "^Trackify-pitch-", "") }))
+$lock = Join-Path $here ('~$' + $Deck + '.pptx')
 New-Item -ItemType Directory -Force $out | Out-Null
 
 # An unlicensed PowerPoint sometimes ignores Quit and keeps the deck open; clear any such instance first.
-Get-Process POWERPNT -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "Trackify-pitch*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+Get-Process POWERPNT -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -like "$Deck*" } | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 500
 if (Test-Path $lock) { Remove-Item $lock -Force -ErrorAction SilentlyContinue }
 Get-ChildItem $out -Filter *.png | Remove-Item -Force
