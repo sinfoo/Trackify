@@ -1,16 +1,15 @@
 import type { ReactNode } from "react";
-import { Logo } from "@/components/shell/logo";
+import { BrandPanel } from "@/components/auth/brand-panel";
 
 /**
- * Minimal auth frame so the forms compile on the new tokens. The two-panel brand layout is the auth
- * engineer's job (CLAUDE_CODE_PROMPT step 3); keep the Logo + card + disclaimer here.
+ * Prototype auth frame: two `flex: 1 1 460px` columns, `wrap-reverse` so on narrow screens the form (second
+ * in DOM) stacks above the always-dark brand panel. Each form sets its own max-width (420 / 560 register).
  */
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-8 px-4 py-10">
-      <Logo href="/" />
-      <div className="w-full max-w-[420px] rounded-[22px] border border-hair bg-panel p-6 shadow-card sm:p-8">{children}</div>
-      <p className="text-center text-sm text-t3">Fictional demo data. Payments are simulated; no real money moves.</p>
+    <div className="flex min-h-screen flex-wrap-reverse items-stretch">
+      <BrandPanel />
+      <section className="flex min-w-0 flex-[1_1_460px] items-center justify-center bg-bg px-6 py-10">{children}</section>
     </div>
   );
 }

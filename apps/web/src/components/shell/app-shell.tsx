@@ -8,7 +8,7 @@ import { ErrorState } from "@/components/ui-kit";
 import { ScenarioClockProvider } from "@/features/agents/scenario-clock";
 import { useEventToasts } from "@/features/settings/preferences";
 import { EventsProvider } from "@/hooks/use-events";
-import { ApiError, redirectToLogin } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { can } from "@/lib/permissions";
 import { useMe } from "@/lib/queries";
 import type { User } from "@/lib/types";
@@ -26,7 +26,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
 
   useEffect(() => {
-    if (me.error instanceof ApiError && me.error.status === 401) redirectToLogin();
+    // Route guard: no session -> /login, which shows "Sign in to open the console." for ?reason=guard.
+    if (me.error instanceof ApiError && me.error.status === 401) {
+      const { pathname, search } = window.location;
+      window.location.replace(`/login?next=${encodeURIComponent(pathname + search)}&reason=guard`);
+    }
   }, [me.error]);
 
   if (me.isPending || (me.error instanceof ApiError && me.error.status === 401)) return <ShellSkeleton />;

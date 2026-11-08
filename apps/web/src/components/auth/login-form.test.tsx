@@ -1,13 +1,15 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { LoginForm, safeNext } from "./auth-forms";
 
+let search = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => search,
 }));
+vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "dark", setTheme: vi.fn() }) }));
 
 const renderForm = () =>
   render(
@@ -15,6 +17,10 @@ const renderForm = () =>
       <LoginForm />
     </QueryClientProvider>,
   );
+
+beforeEach(() => {
+  search = new URLSearchParams();
+});
 
 describe("LoginForm", () => {
   it("shows validation errors and does not call the API on empty submit", async () => {
@@ -39,6 +45,17 @@ describe("LoginForm", () => {
     await userEvent.click(screen.getByRole("button", { name: /Finance demo account/ }));
     expect(screen.getByLabelText("Email")).toHaveValue("finance@demo.techx");
     expect(screen.getByLabelText("Password")).toHaveValue("Demo!2026");
+  });
+
+  it("explains a route-guard redirect inline", () => {
+    search = new URLSearchParams("next=%2Fdashboard&reason=guard");
+    renderForm();
+    expect(screen.getByRole("alert")).toHaveTextContent("Sign in to open the console.");
+  });
+
+  it("shows no guard message on a direct visit", () => {
+    renderForm();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
 
