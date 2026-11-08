@@ -80,8 +80,12 @@ If the provider fails or times out, every agent falls back to its rules engine a
 | security@demo.techx | SECURITY_ANALYST |
 | sales@demo.techx | SALES_MANAGER |
 | viewer@demo.techx | VIEWER |
+| buyer@demo.techx | BUYER (buyer dashboard at `/account`, owns one paid enrollment) |
 
-Customers do not log in: the public assistant at `/assistant` creates a fictional customer per conversation.
+Anyone can chat with the assistant as a guest. **Buying needs a buyer account** (sign up in one step at `/register?as=buyer`):
+the guest conversation is attached to the account, and the buyer dashboard at `/account` holds the library of
+programs bought, orders in arrival, receipts and the assistant's recommendations. Like Fiverr, one account can hold
+both sides: business owners (`admin@`) can switch between the seller console and the buyer dashboard.
 
 ## 11. API documentation
 

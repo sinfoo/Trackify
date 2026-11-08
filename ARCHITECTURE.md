@@ -186,6 +186,7 @@ payments:{...}, voice:{stt:"browser",tts:"browser"}, environment}` (never keys).
 | security@demo.techx | SECURITY_ANALYST |
 | sales@demo.techx | SALES_MANAGER |
 | viewer@demo.techx | VIEWER |
+| buyer@demo.techx | BUYER |
 
 ## Implemented deviations from the contract above
 
