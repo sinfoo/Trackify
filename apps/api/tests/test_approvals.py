@@ -216,3 +216,34 @@ def test_approval_decision_closes_the_alerts_behind_the_hold(db):
     db.expire_all()
     events = db.scalars(select(SecurityEvent).where(SecurityEvent.transaction_id == tx.id)).all()
     assert all(e.status == "RESOLVED" and "approval decision" in e.resolution_note for e in events)
+
+
+def test_release_after_velocity_hold_uses_the_held_attempt_method(client, db):
+    """3 declines then a good card: the hold must release with the good card, not re-run a declining one."""
+    from conftest import login
+
+    _, _, ps = checkout(db, "intro-ai")
+    sid = str(ps.id)
+    db.commit()
+    for i, m in enumerate(["sim_card_declined", "sim_insufficient_funds", "sim_provider_error"]):
+        r = client.post(
+            f"/api/v1/public/checkout/{sid}/pay", json={"payment_method": m}, headers={"Idempotency-Key": f"velocity-{i}-attempt"}
+        )
+        assert r.json()["status"] == "FAILED", r.text
+    r = client.post(
+        f"/api/v1/public/checkout/{sid}/pay",
+        json={"payment_method": "sim_card_success"},
+        headers={"Idempotency-Key": "velocity-4-success"},
+    )
+    assert r.json()["status"] == "REQUIRES_APPROVAL", r.text
+    db.expire_all()
+    ar = db.scalar(
+        select(ApprovalRequest)
+        .where(ApprovalRequest.transaction_id == ps.transaction.id, ApprovalRequest.status == "PENDING_REVIEW")
+        .order_by(ApprovalRequest.created_at.desc())
+    )
+    assert ar.payload["payment_method"] == "sim_card_success"
+    db.close()
+    login(client, "security@demo.techx")
+    assert client.post(f"/api/v1/approvals/{ar.id}/approve", json={"notes": "verified"}).status_code == 200
+    assert client.get(f"/api/v1/public/checkout/{sid}").json()["status"] == "SUCCEEDED"
