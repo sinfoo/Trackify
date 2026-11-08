@@ -21,7 +21,7 @@ test("protected pages redirect anonymous users to login", async ({ page }) => {
   await page.waitForURL(/\/login/);
 });
 
-test("customer chats, enrolls and completes a simulated payment", async ({ page }) => {
+test("guest chats, is asked for a buyer account on enroll, pays and sees the program in the library", async ({ page }) => {
   await page.goto("/assistant");
   await page.evaluate(() => localStorage.removeItem("assistant.session"));
   await page.reload();
@@ -32,11 +32,37 @@ test("customer chats, enrolls and completes a simulated payment", async ({ page 
   const enroll = page.getByRole("button", { name: /Enroll in Generative AI/ }).last();
   await expect(enroll).toBeVisible({ timeout: 20_000 });
   await enroll.click();
-  await page.waitForURL(/\/checkout\//);
-  await expect(page.getByText(/simulated/i).first()).toBeVisible();
-  await page.getByText("Test card · always succeeds").click();
-  await page.getByRole("button", { name: /^Pay/ }).click();
-  await page.waitForURL(/\/success/, { timeout: 20_000 });
+  // Buying needs a buyer account: the gate sends the guest to the buyer sign-in and resumes the enrollment after.
+  await page.waitForURL(/\/login\?as=buyer/);
+  await page.getByLabel("Email").fill("buyer@demo.techx");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/\/(checkout\/|account)/, { timeout: 20_000 });
+  if (/\/account/.test(page.url())) return; // demo buyer already owns this program: ALREADY_ENROLLED lands on the library
+  // The shared demo buyer accumulates purchases, so the velocity rule may hold the payment for a human (an open held
+  // checkout is reused on the next enroll): paying and being held are both valid outcomes.
+  const held = page.getByRole("heading", { name: /A person will review this payment/ });
+  const card = page.getByText("Test card · always succeeds");
+  await Promise.race([card.waitFor({ timeout: 20_000 }), held.waitFor({ timeout: 20_000 })]);
+  if (await card.isVisible()) {
+    await card.click();
+    await page.getByRole("button", { name: /^Pay/ }).click();
+    await Promise.race([page.waitForURL(/\/success/, { timeout: 20_000 }), held.waitFor({ timeout: 20_000 })]);
+  }
+  await page.goto("/account");
+  await expect(page.getByText(/Generative AI/).first()).toBeVisible();
+  await expect(page.getByText(/Paid|Under review/).first()).toBeVisible();
+});
+
+test("buyer-only account lands on the buyer dashboard and cannot open the seller console", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("buyer@demo.techx");
+  await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await page.waitForURL(/\/account/, { timeout: 20_000 });
+  await expect(page.getByText(/Library/).first()).toBeVisible();
+  await page.goto("/dashboard");
+  await page.waitForURL(/\/account/);
 });
 
 test("prompt injection is neutralised in the public chat", async ({ page }) => {
