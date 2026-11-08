@@ -1,13 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RegisterForm, passwordStrength, registerSchema } from "./auth-forms";
+import { RegisterForm, buyerRegisterSchema, passwordStrength, registerSchema } from "./auth-forms";
 
+let search = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => search,
 }));
+beforeEach(() => {
+  search = new URLSearchParams();
+});
 vi.mock("next-themes", () => ({ useTheme: () => ({ resolvedTheme: "dark", setTheme: vi.fn() }) }));
 
 const renderForm = () =>
@@ -77,5 +81,42 @@ describe("RegisterForm", () => {
     await userEvent.type(screen.getByLabelText("Confirm password"), "Abcdefg1?");
     await userEvent.click(screen.getByRole("button", { name: "Create account" }));
     expect(await screen.findByText("Passwords do not match")).toBeInTheDocument();
+  });
+});
+
+describe("RegisterForm as=buyer", () => {
+  it("renders the short buyer form without the business fields", () => {
+    search = new URLSearchParams("as=buyer&next=%2Fassistant");
+    renderForm();
+    expect(screen.getByRole("heading", { name: "Create your buyer account" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Full name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Business name/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Your role/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create buyer account" })).toBeInTheDocument();
+    // The sign-in link keeps the side and the return address.
+    expect(screen.getByRole("link", { name: /Already have an account/ })).toHaveAttribute("href", "/login?as=buyer&next=%2Fassistant");
+  });
+
+  it("posts role buyer with only name, email and password", async () => {
+    search = new URLSearchParams("as=buyer");
+    const f = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(JSON.stringify({ id: "u1", full_name: "Nour Ben Ali", email: "nour@example.tn", roles: ["BUYER"] }), { status: 200 }));
+    renderForm();
+    await userEvent.type(screen.getByLabelText("Full name"), "Nour Ben Ali");
+    await userEvent.type(screen.getByLabelText("Email"), "nour@example.tn");
+    await userEvent.type(screen.getByLabelText("Password"), "Strong!2026");
+    await userEvent.type(screen.getByLabelText("Confirm password"), "Strong!2026");
+    await userEvent.click(screen.getByRole("button", { name: "Create buyer account" }));
+    const call = f.mock.calls.find(([url]) => String(url).endsWith("/auth/register"));
+    expect(call).toBeTruthy();
+    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ full_name: "Nour Ben Ali", email: "nour@example.tn", password: "Strong!2026", role: "buyer" });
+    f.mockRestore();
+  });
+
+  it("buyerRegisterSchema needs name, email and a matching 8+ password", () => {
+    const ok = { full_name: "Nour Ben Ali", email: "nour@example.tn", password: "Strong!2026", confirm: "Strong!2026" };
+    expect(buyerRegisterSchema.safeParse(ok).success).toBe(true);
+    expect(buyerRegisterSchema.safeParse({ ...ok, full_name: "N" }).success).toBe(false);
+    expect(buyerRegisterSchema.safeParse({ ...ok, confirm: "other" }).success).toBe(false);
   });
 });

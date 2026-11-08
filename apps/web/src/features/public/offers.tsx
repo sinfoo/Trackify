@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui-kit";
 import { ApiError } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
-import type { Offer } from "@/lib/types";
+import type { Journey, Offer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { enrollInProduct, loadSession, publicApi } from "./api";
 import { OfferedBy } from "./business-blocks";
@@ -43,10 +43,20 @@ export const GHOST_BTN =
   "inline-flex h-[46px] items-center justify-center gap-2 rounded-[15px] border border-hair bg-panel2 px-[18px] text-sm font-extrabold text-text no-underline hover:bg-panel3 hover:no-underline [&_svg]:size-4";
 
 /** Enroll / Enrolled / Resume checkout / Sold out, from the journey of this browser's conversation. */
-export function EnrollButton({ offer, className }: { offer: Pick<Offer, "id" | "name" | "seats_left">; className?: string }) {
+export function EnrollButton({
+  offer,
+  journey: given,
+  className,
+}: {
+  offer: Pick<Offer, "id" | "name" | "seats_left">;
+  /** Known journey (e.g. from /me/account); defaults to this browser's conversation. */
+  journey?: Journey | null;
+  className?: string;
+}) {
   const router = useRouter();
   const qc = useQueryClient();
-  const { data: journey } = useJourney();
+  const { data: fetched } = useJourney();
+  const journey = given ?? fetched;
   const [pending, setPending] = useState(false);
   const soldOut = offer.seats_left <= 0;
   const enrolled = journey?.enrolled_product_ids.includes(offer.id);

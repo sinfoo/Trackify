@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { LogOut, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { LogOut, PanelLeftClose, PanelLeftOpen, Search, ShoppingBag } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { ROLE_LABELS, type RoleName } from "@/lib/fixtures";
 import { can } from "@/lib/permissions";
-import { usePendingApprovalsCount } from "@/lib/queries";
+import { useBuyerFlags, usePendingApprovalsCount } from "@/lib/queries";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
@@ -65,6 +65,7 @@ export function Sidebar({
   const pathname = usePathname();
   const pending = usePendingApprovalsCount(can(user, "approvals:read"));
   const signOut = useSignOut();
+  const { data: flags } = useBuyerFlags();
   const drawer = variant === "drawer";
   // Label visibility: drawer always; desktop only when expanded AND wide enough.
   const label = drawer ? "" : collapsed ? "hidden" : "hidden wide:block";
@@ -186,6 +187,16 @@ export function Sidebar({
           <span className="block truncate text-[13.5px] font-bold">{user.full_name}</span>
           <span className="block text-[11.5px] text-[#8A97B3]">{roleLabel(user.roles[0])}</span>
         </span>
+        {flags?.is_buyer && (
+          <Link
+            href="/account"
+            aria-label="Switch to buying"
+            title="Switch to buying"
+            className={cn("grid size-7 shrink-0 place-items-center rounded-lg text-[#8A97B3] transition-colors hover:bg-white/[.08] hover:text-[#F3F5F9]", label)}
+          >
+            <ShoppingBag aria-hidden className="size-[15px]" />
+          </Link>
+        )}
         <button
           type="button"
           onClick={signOut}

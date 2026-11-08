@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useSyncExternalStore } from "react";
-import { usePathname } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Moon, Sun, UserRound } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, LayoutDashboard, LayoutGrid, LogIn, LogOut, Moon, Store, Sun, UserRound } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Logo } from "@/components/shell/logo";
 import { useTrackifyTheme } from "@/components/theme";
 import { api } from "@/lib/api";
+import { useBuyerFlags } from "@/lib/queries";
 import type { User } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { hasSession, subscribeSession } from "./api";
@@ -26,9 +28,65 @@ function usePublicMe() {
 const NAV = [
   { href: "/offers", label: "Programs" },
   { href: "/assistant", label: "Assistant" },
-  { href: "/my", label: "My Trackify", session: true, icon: UserRound },
+  { href: "/account", label: "My dashboard", session: true, icon: UserRound },
 ];
 const noSession = () => false;
+
+/** Signed-in menu (Fiverr-style sides): My dashboard, Switch to selling / Start selling, Sign out. */
+function UserMenu({ user }: { user: User }) {
+  const router = useRouter();
+  const qc = useQueryClient();
+  const { data: flags } = useBuyerFlags();
+  const signOut = async () => {
+    await api.post("/auth/logout", undefined, { noAuthRedirect: true }).catch(() => {});
+    qc.clear();
+    router.replace("/");
+  };
+  const initials = user.full_name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Account menu"
+        className="ml-1.5 inline-flex h-[38px] items-center gap-2 rounded-[11px] border border-hair bg-panel pr-2 pl-1 text-[13.5px] font-extrabold text-text hover:bg-panel2"
+      >
+        <span aria-hidden className="grid size-[30px] place-items-center rounded-[9px] bg-brand-bg text-xs font-extrabold text-brand-text">
+          {initials}
+        </span>
+        <span className="hidden max-w-[140px] truncate sm:inline">{user.full_name.split(/\s+/)[0]}</span>
+        <ChevronDown aria-hidden className="size-3.5 text-t3" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[220px]">
+        <DropdownMenuLabel className="font-normal">
+          <span className="block truncate text-[13.5px] font-extrabold text-text">{user.full_name}</span>
+          <span className="block truncate text-xs text-t3">{user.email}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => router.push("/account")}>
+          <LayoutGrid aria-hidden /> My dashboard
+        </DropdownMenuItem>
+        {flags?.is_seller ? (
+          <DropdownMenuItem onSelect={() => router.push("/dashboard")}>
+            <LayoutDashboard aria-hidden /> Switch to selling
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem onSelect={() => router.push("/register?as=seller")}>
+            <Store aria-hidden /> Start selling
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => void signOut()}>
+          <LogOut aria-hidden /> Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 /** Prototype public header: sticky glass, 68px, logo + "Run by six AI agents", nav, theme, Dashboard. */
 export function PublicHeader() {
@@ -36,7 +94,7 @@ export function PublicHeader() {
   const me = usePublicMe();
   const { toggle } = useTrackifyTheme();
   // "My Trackify" only once this browser holds a conversation (server renders without it).
-  const session = useSyncExternalStore(subscribeSession, hasSession, noSession);
+  const session = useSyncExternalStore(subscribeSession, hasSession, noSession) || !!me.data;
   return (
     <header className="sticky top-0 z-30 border-b border-hair bg-glass backdrop-blur-[14px]">
       <div className="mx-auto flex h-[68px] w-full max-w-[1180px] items-center gap-2.5 px-4 sm:px-6">
@@ -81,14 +139,18 @@ export function PublicHeader() {
             <Sun aria-hidden className="hidden dark:block" />
             <Moon aria-hidden className="dark:hidden" />
           </button>
-          <Link
-            href={me.data ? "/dashboard" : "/login"}
-            aria-label="Dashboard"
-            className="ml-1.5 inline-flex h-[38px] items-center gap-[7px] rounded-[11px] border border-hair bg-panel px-2.5 text-[13.5px] font-extrabold text-text no-underline hover:bg-panel2 hover:no-underline sm:px-3.5"
-          >
-            <LayoutDashboard aria-hidden className="size-3.5" />
-            <span className="hidden sm:inline">Dashboard</span>
-          </Link>
+          {me.data ? (
+            <UserMenu user={me.data} />
+          ) : (
+            <Link
+              href="/login"
+              aria-label="Sign in"
+              className="ml-1.5 inline-flex h-[38px] items-center gap-[7px] rounded-[11px] border border-hair bg-panel px-2.5 text-[13.5px] font-extrabold text-text no-underline hover:bg-panel2 hover:no-underline sm:px-3.5"
+            >
+              <LogIn aria-hidden className="size-3.5" />
+              <span className="hidden sm:inline">Sign in</span>
+            </Link>
+          )}
         </nav>
       </div>
     </header>

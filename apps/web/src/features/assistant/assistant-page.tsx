@@ -126,8 +126,8 @@ export function AssistantPage({ initialQuestion }: { initialQuestion?: string })
             </button>
           )}
           {hasSession && (
-            <Link href="/my" className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl border border-hair bg-panel2 text-[13px] font-extrabold text-text no-underline hover:bg-panel3 hover:no-underline">
-              My Trackify
+            <Link href="/account" className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl border border-hair bg-panel2 text-[13px] font-extrabold text-text no-underline hover:bg-panel3 hover:no-underline">
+              My dashboard
             </Link>
           )}
         </div>

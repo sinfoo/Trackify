@@ -11,7 +11,7 @@ import { ApiError, newIdempotencyKey } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
 import type { PayStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { publicApi } from "@/features/public/api";
+import { buyerSignInUrl, publicApi } from "@/features/public/api";
 import { BuyingFrom } from "@/features/public/business-blocks";
 
 const REVIEW_POLL_MS = 5000;
@@ -51,6 +51,8 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
   const [method, setMethod] = useState<string>("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 401 BUYER_ACCOUNT_REQUIRED / 403 NOT_YOUR_ORDER: the message above plus a way to sign in as the right buyer.
+  const [authError, setAuthError] = useState<number | null>(null);
   const [outcome, setOutcome] = useState<{ status: PayStatus; message: string; ref: string; at: number } | null>(null);
   // One key per pay attempt: reused if the same attempt is retried after a network error, dropped once answered.
   const keyRef = useRef<string | null>(null);
@@ -106,6 +108,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
       // Network failure or 5xx: keep the key so pressing Pay again replays the same attempt safely.
       if (e instanceof ApiError && e.status < 500) keyRef.current = null;
       setError(e instanceof ApiError ? e.message : "Connection problem. Press Pay again to retry the same attempt.");
+      setAuthError(e instanceof ApiError && (e.code === "BUYER_ACCOUNT_REQUIRED" || e.code === "NOT_YOUR_ORDER") ? e.status : null);
       // Expired or already settled elsewhere: reload so the page shows the real state.
       if (e instanceof ApiError && e.status === 409) void q.refetch();
     }
@@ -227,6 +230,14 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
               {error && (
                 <p role="alert" className="mt-3 flex items-center gap-2 rounded-xl border border-danger bg-danger-bg px-3 py-2.5 text-[13px] font-semibold text-danger">
                   <Info className="size-4 shrink-0" aria-hidden /> {error}
+                </p>
+              )}
+              {authError && (
+                <p className="mt-2 text-[13px] text-t2">
+                  {authError === 403 ? "Sign out and sign in with the account that placed this order. " : "Enrollments belong to a buyer account. "}
+                  <Link href={buyerSignInUrl(`/checkout/${sessionId}`)} className="font-bold text-brand-text">
+                    Sign in as a buyer
+                  </Link>
                 </p>
               )}
               <button

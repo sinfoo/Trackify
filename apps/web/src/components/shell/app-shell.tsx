@@ -25,15 +25,18 @@ const SIDEBAR_KEY = "trackify-sidebar";
 export function AppShell({ children }: { children: ReactNode }) {
   const me = useMe();
 
+  const buyerOnly = !!me.data && me.data.roles.every((r) => r === "BUYER");
   useEffect(() => {
     // Route guard: no session -> /login, which shows "Sign in to open the console." for ?reason=guard.
     if (me.error instanceof ApiError && me.error.status === 401) {
       const { pathname, search } = window.location;
       window.location.replace(`/login?next=${encodeURIComponent(pathname + search)}&reason=guard`);
     }
-  }, [me.error]);
+    // Buyer-only accounts have no console: their side is /account.
+    if (buyerOnly) window.location.replace("/account");
+  }, [me.error, buyerOnly]);
 
-  if (me.isPending || (me.error instanceof ApiError && me.error.status === 401)) return <ShellSkeleton />;
+  if (me.isPending || buyerOnly || (me.error instanceof ApiError && me.error.status === 401)) return <ShellSkeleton />;
   if (me.error)
     return (
       <div className="grid min-h-screen place-items-center p-6">

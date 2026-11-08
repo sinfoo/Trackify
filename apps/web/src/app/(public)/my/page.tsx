@@ -1,7 +1,6 @@
-import { MyTrackify } from "@/features/public/my-trackify";
+import { redirect } from "next/navigation";
 
-export const metadata = { title: "My Trackify" };
-
+/** Old hub address: the buyer dashboard lives at /account. */
 export default function Page() {
-  return <MyTrackify />;
+  redirect("/account");
 }

@@ -1,7 +1,8 @@
 // Public (no-login) endpoints + the customer's conversation session kept in localStorage.
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type {
-  BuyerAccount,
+  BuyerDashboard,
+  BuyerFlags,
   CheckoutSession,
   ConversationMessagesResponse,
   Offer,
@@ -57,7 +58,6 @@ export const publicApi = {
   offer: (slug: string) => api.get<Offer>(`/public/offers/${encodeURIComponent(slug)}`, opts),
   start: (body: StartConversationRequest) => api.post<StartConversationResponse>("/public/conversations", body, opts),
   conversation: (s: StoredSession) => api.get<ConversationMessagesResponse>(`/public/conversations/${s.conversation_id}`, tok(s)),
-  account: (s: StoredSession) => api.get<BuyerAccount>(`/public/conversations/${s.conversation_id}/account`, tok(s)),
   send: (s: StoredSession, content: string) =>
     api.post<ConversationMessagesResponse>(`/public/conversations/${s.conversation_id}/messages`, { content }, tok(s)),
   enroll: (s: StoredSession, product_id: string) =>
@@ -68,9 +68,56 @@ export const publicApi = {
       ...opts,
       headers: { "Idempotency-Key": idempotencyKey },
     }),
+  // Buyer account (cookie auth). 401 is handled by the caller, never by a redirect to the console login.
+  flags: () => api.get<BuyerFlags>("/me/flags", opts),
+  account: () => api.get<BuyerDashboard>("/me/account", opts),
+  linkConversation: (s: StoredSession) =>
+    api.post<{ ok: boolean }>("/me/link-conversation", { conversation_id: s.conversation_id, access_token: s.access_token }, opts),
   feedback: (s: StoredSession, rating: number, comment: string) =>
     api.post<{ ok: boolean }>("/public/feedback", { conversation_id: s.conversation_id, rating, comment }, tok(s)),
 };
+
+// ---------- buyer account gate ----------
+
+const PENDING_ENROLL = "enroll.pending"; // sessionStorage: {product_id} to resume right after sign-in
+
+export const buyerSignInUrl = (next: string) => `/login?as=buyer&next=${encodeURIComponent(next)}`;
+
+/**
+ * Guests cannot enroll (401 BUYER_ACCOUNT_REQUIRED): remember the intent, send them to the buyer sign-in, and come
+ * back here. Returns true when it took over (the caller should stop: the page is leaving). Staff-only accounts get a
+ * 403 with the same code, which is a plain error for the caller to show.
+ */
+export function gateToBuyerSignIn(e: unknown, productId?: string): boolean {
+  if (!(e instanceof ApiError) || e.code !== "BUYER_ACCOUNT_REQUIRED" || e.status !== 401 || typeof window === "undefined") return false;
+  if (productId) sessionStorage.setItem(PENDING_ENROLL, JSON.stringify({ product_id: productId }));
+  const { pathname, search } = window.location;
+  // Outside React (shared helper): a full navigation is fine, the login page is a different layout anyway.
+  window.location.assign(buyerSignInUrl(pathname + search));
+  return true;
+}
+
+/**
+ * Right after a buyer signed in or up: attach the guest conversation (if any) to the account, then finish the enroll
+ * that was interrupted by the gate. Returns where to go next, or null when there was nothing pending.
+ */
+export async function resumeBuyerIntent(): Promise<string | null> {
+  const s = loadSession();
+  if (s) await publicApi.linkConversation(s).catch(() => {}); // stale token: nothing to attach
+  let pending: { product_id?: string } | null = null;
+  try {
+    pending = JSON.parse(sessionStorage.getItem(PENDING_ENROLL) ?? "null");
+  } catch {
+    pending = null;
+  }
+  sessionStorage.removeItem(PENDING_ENROLL);
+  if (!pending?.product_id) return null;
+  try {
+    return `/checkout/${await enrollInProduct(pending.product_id)}`;
+  } catch (e) {
+    return e instanceof ApiError && e.code === "ALREADY_ENROLLED" ? "/account" : null;
+  }
+}
 
 /** Reuse the stored conversation, or open a quiet text one, then enroll. Returns the checkout session id. */
 export async function enrollInProduct(productId: string, retried = false): Promise<string> {
@@ -83,6 +130,7 @@ export async function enrollInProduct(productId: string, retried = false): Promi
   try {
     return (await publicApi.enroll(s, productId)).checkout_session_id;
   } catch (e) {
+    if (gateToBuyerSignIn(e, productId)) return new Promise(() => {}); // page is leaving: never resolve
     // Stale session (e.g. after a demo reset): start fresh once.
     if (retried || (e as { status?: number }).status !== 404) throw e;
     clearSession();

@@ -13,7 +13,7 @@ import { formatMoney } from "@/lib/format";
 import type { Journey, OfferCard, PublicMessage } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { BrowserSpeechAdapter, type ListenState } from "@/features/voice/adapter";
-import { clearSession, loadSession, publicApi, saveSession, type StoredSession } from "@/features/public/api";
+import { clearSession, gateToBuyerSignIn, loadSession, publicApi, saveSession, type StoredSession } from "@/features/public/api";
 import "@/features/public/public.css";
 
 /** Follow-up suggestions that fit the conversation so far; never repeats what the customer already asked. */
@@ -468,6 +468,7 @@ function ChatPane({
       if (onCheckout) onCheckout(checkout_session_id);
       else router.push(`/checkout/${checkout_session_id}`);
     } catch (e) {
+      if (gateToBuyerSignIn(e, productId)) return; // guest: off to the buyer sign-in, back here after
       if (e instanceof ApiError && e.code === "ALREADY_ENROLLED") {
         toast.success(e.message);
         publicApi.conversation(session).then((r) => r.journey && setJourney(r.journey), () => {});

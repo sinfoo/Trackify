@@ -85,7 +85,7 @@ export function SuccessView({ reference, session }: { reference?: string; sessio
         </dl>
       </div>
       <div className="mt-[22px] flex flex-wrap justify-center gap-2.5">
-        <Link href="/my" className={PRIMARY}>
+        <Link href="/account" className={PRIMARY}>
           <LayoutList aria-hidden /> See my enrollments
         </Link>
         <Link href="/offers" className={GHOST}>
@@ -202,7 +202,7 @@ export function PaymentFailedView({ session, reason }: { session?: string; reaso
         <Link href="/assistant" className={GHOST}>
           <MessageCircle aria-hidden /> Ask the assistant
         </Link>
-        <Link href="/my" className={GHOST}>
+        <Link href="/account" className={GHOST}>
           <LayoutList aria-hidden /> My enrollments
         </Link>
       </div>

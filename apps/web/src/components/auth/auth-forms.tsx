@@ -24,6 +24,7 @@ import {
   Moon,
   Phone,
   Shield,
+  ShoppingBag,
   Sun,
   User as UserIcon,
   Users,
@@ -35,7 +36,8 @@ import { useTrackifyTheme } from "@/components/theme";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import { qk } from "@/lib/queries";
-import type { User } from "@/lib/types";
+import type { BuyerFlags, User } from "@/lib/types";
+import { resumeBuyerIntent } from "@/features/public/api";
 import { cn } from "@/lib/utils";
 
 export const DEMO_PASSWORD = "Demo!2026";
@@ -46,6 +48,7 @@ export const DEMO_ACCOUNTS: { email: string; role: string; icon: LucideIcon; col
   { email: "security@demo.techx", role: "Security", icon: Shield, color: "security" },
   { email: "sales@demo.techx", role: "Sales", icon: Mic, color: "intelligence" },
   { email: "viewer@demo.techx", role: "Viewer", icon: Eye, color: "human" },
+  { email: "buyer@demo.techx", role: "Buyer", icon: ShoppingBag, color: "strategy" },
 ];
 
 export const FIELDS_OF_ACTIVITY = [
@@ -85,6 +88,10 @@ export const registerSchema = z
     confirm: z.string(),
   })
   .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords do not match" });
+/** Short buyer sign-up: name, email, password, confirm. */
+export const buyerRegisterSchema = z
+  .object({ full_name: z.string().trim().min(2, "Enter your full name"), email, password: newPassword, confirm: z.string() })
+  .refine((v) => v.password === v.confirm, { path: ["confirm"], message: "Passwords do not match" });
 export const forgotSchema = z.object({ email });
 export const resetSchema = z
   .object({ password: newPassword.regex(/\d/, "Include at least one digit"), confirm: z.string() })
@@ -93,6 +100,28 @@ export const resetSchema = z
 /** Only allow same-origin relative redirects. */
 export function safeNext(next: string | null): string {
   return next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+}
+
+/** `?as=buyer|seller`: which side the visitor came from (buyer gate, "Start selling"). */
+type Side = "buyer" | "seller" | null;
+const sideOf = (p: URLSearchParams): Side => (p.get("as") === "buyer" ? "buyer" : p.get("as") === "seller" ? "seller" : null);
+const withSide = (href: string, p: URLSearchParams) => {
+  const q = new URLSearchParams();
+  for (const k of ["as", "next"]) if (p.get(k)) q.set(k, p.get(k)!);
+  const s = q.toString();
+  return s ? `${href}?${s}` : href;
+};
+
+/**
+ * Where to go once signed in: finish an interrupted enroll (links the guest chat first), else `?next=`, else the
+ * side the account has: buyers-only to /account, sellers to /dashboard.
+ */
+export async function destinationAfterSignIn(next: string | null): Promise<string> {
+  const resumed = await resumeBuyerIntent().catch(() => null);
+  if (resumed) return resumed;
+  if (next) return safeNext(next);
+  const flags = await api.get<BuyerFlags>("/me/flags", { noAuthRedirect: true }).catch(() => null);
+  return flags && !flags.is_seller ? "/account" : "/dashboard";
 }
 
 /** 4 bands above "Too short": length 8+, then +1 for a digit, mixed case, symbol or 12+ chars. */
@@ -369,8 +398,11 @@ export function LoginForm() {
   const params = useSearchParams();
   const qc = useQueryClient();
   // Sent here by the route guard (app-shell / fetch layer): say why.
+  const side = sideOf(params);
   const guarded = params.get("reason") === "guard" || params.has("next");
-  const [formError, setFormError] = useState<string | null>(guarded ? "Sign in to open the console." : null);
+  const [formError, setFormError] = useState<string | null>(
+    guarded ? (side === "buyer" ? "Sign in or create a buyer account to continue." : "Sign in to open the console.") : null,
+  );
   const {
     register,
     handleSubmit,
@@ -385,7 +417,7 @@ export function LoginForm() {
     try {
       const user = await api.post<User>("/auth/login", values);
       qc.setQueryData(qk.me, user);
-      router.replace(safeNext(params.get("next")));
+      router.replace(await destinationAfterSignIn(params.get("next")));
     } catch (e) {
       setFormError(errorMessage(e));
     }
@@ -405,10 +437,10 @@ export function LoginForm() {
   return (
     <AuthCard
       title="Sign in"
-      description="Operations console for the agent team."
+      description={side === "buyer" ? "Buy programs, follow your enrollments and keep your receipts." : "Operations console for the agent team."}
       links={[
         { href: "/forgot-password", label: "Forgot password?" },
-        { href: "/register", label: "Create an account" },
+        { href: withSide("/register", params), label: side === "buyer" ? "Create a buyer account" : "Create an account" },
       ]}
     >
       {notice && <SuccessBox icon={CircleCheck}>{notice}</SuccessBox>}
@@ -453,7 +485,77 @@ export function LoginForm() {
   );
 }
 
+/** `/register`: short buyer form for `?as=buyer`, the business (seller) form otherwise. */
 export function RegisterForm() {
+  const params = useSearchParams();
+  return sideOf(params) === "buyer" ? <BuyerRegisterForm /> : <SellerRegisterForm />;
+}
+
+export function BuyerRegisterForm() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const qc = useQueryClient();
+  const [formError, setFormError] = useState<string | null>(null);
+  const {
+    register,
+    handleSubmit,
+    control,
+    formState: { errors, isSubmitting },
+  } = useForm<z.infer<typeof buyerRegisterSchema>>({
+    resolver: zodResolver(buyerRegisterSchema),
+    defaultValues: { full_name: "", email: "", password: "", confirm: "" },
+  });
+  const password = useWatch({ control, name: "password" });
+
+  const onSubmit = handleSubmit(async ({ full_name, email, password }) => {
+    setFormError(null);
+    try {
+      // The API signs the new buyer in (cookies).
+      const user = await api.post<User>("/auth/register", { full_name, email, password, role: "buyer" });
+      qc.setQueryData(qk.me, user);
+      toast.success(`Welcome, ${user.full_name.trim().split(/\s+/)[0] || user.full_name}.`);
+      router.replace(await destinationAfterSignIn(params.get("next")));
+    } catch (e) {
+      setFormError(errorMessage(e));
+    }
+  });
+
+  return (
+    <AuthCard
+      title="Create your buyer account"
+      description="Enroll in programs, follow each enrollment and keep your receipts in one place."
+      links={[
+        { href: withSide("/login", params), label: "Already have an account? Sign in" },
+        { href: "/register?as=seller", label: "Selling? Business account" },
+      ]}
+    >
+      <form onSubmit={onSubmit} noValidate>
+        <FieldGrid>
+          <TextField id="full_name" label="Full name" icon={UserIcon} placeholder="Yasmine Trabelsi" autoComplete="name" reg={register("full_name")} error={errors.full_name} />
+          <TextField id="email" label="Email" icon={Mail} type="email" placeholder="you@example.com" autoComplete="email" reg={register("email")} error={errors.email} />
+          <TextField
+            id="password"
+            label="Password"
+            icon={Lock}
+            type="password"
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            span={1}
+            reg={register("password")}
+            error={errors.password}
+            hint={<StrengthMeter password={password} />}
+          />
+          <TextField id="confirm" label="Confirm password" icon={Lock} type="password" placeholder="Repeat it" autoComplete="new-password" span={1} reg={register("confirm")} error={errors.confirm} />
+        </FieldGrid>
+        <FormError message={formError} />
+        <p className="mt-3 text-[12.5px] leading-normal text-t3">Payments are simulated: no card details, no real money. Confirmations are posted in your conversation.</p>
+        <Cta busy={isSubmitting}>{isSubmitting ? "Creating account" : "Create buyer account"}</Cta>
+      </form>
+    </AuthCard>
+  );
+}
+
+export function SellerRegisterForm() {
   const router = useRouter();
   const qc = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
@@ -488,7 +590,10 @@ export function RegisterForm() {
       width={560}
       title="Create your account"
       description="Set up your business console. The owner account gets full access; teammates get the role you pick."
-      links={[{ href: "/login", label: "Already have an account? Sign in" }]}
+      links={[
+        { href: "/login", label: "Already have an account? Sign in" },
+        { href: "/register?as=buyer", label: "Just here to learn? Buyer account" },
+      ]}
     >
       <form onSubmit={onSubmit} noValidate>
         <FieldGrid>

@@ -280,7 +280,7 @@ export interface BuyerEnrollment {
   order_reference: string;
   order_status: string;
   created_at: ISODate;
-  product: Pick<Offer, "id" | "slug" | "name" | "duration_weeks" | "level" | "category">;
+  product: Pick<Offer, "id" | "slug" | "name" | "duration_weeks" | "level" | "category"> & Partial<Pick<Offer, "summary" | "learning_outcomes">>;
   amount: Money;
   currency: Currency;
   enrollment_status: string;
@@ -299,6 +299,26 @@ export interface BuyerAccount {
   customer: { full_name: string | null; email: string | null };
   recommended: (Offer & { recommended_at: ISODate; pitched: boolean })[];
   enrollments: BuyerEnrollment[];
+  journey: Journey;
+}
+/** GET /me/flags: which side(s) the signed-in user can use. */
+export interface BuyerFlags {
+  is_buyer: boolean;
+  is_seller: boolean;
+  roles: string[];
+}
+/** GET /me/account [buyer:self]: the buyer dashboard behind /account. */
+export interface BuyerDashboard {
+  user: { id: UUID; full_name: string; email: string; is_buyer: boolean; is_seller: boolean; roles: string[] };
+  customer: { id: UUID; full_name: string | null; email: string | null } | null;
+  recommended: BuyerAccount["recommended"];
+  /** ACTIVE enrollments (bought programs). */
+  library: BuyerEnrollment[];
+  /** Pending / under review. */
+  arriving: BuyerEnrollment[];
+  /** Every order, with payment + progress. */
+  orders: BuyerEnrollment[];
+  conversations: { id: UUID; created_at: ISODate; summary: string | null }[];
   journey: Journey;
 }
 

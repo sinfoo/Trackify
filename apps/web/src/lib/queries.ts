@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
-import type { Approval, Paged, User } from "./types";
+import type { Approval, BuyerFlags, Paged, User } from "./types";
 
 // Shared query keys. Event-driven invalidation in use-events.ts targets these roots.
 export const qk = {
@@ -27,6 +27,17 @@ export function useMe() {
     queryFn: () => api.get<User>("/auth/me"),
     staleTime: 60_000,
     retry: false,
+  });
+}
+
+/** Buy / sell switch flags for the signed-in user (keyed under `me`, so sign-out clears it). */
+export function useBuyerFlags(enabled = true) {
+  return useQuery({
+    queryKey: [...qk.me, "flags"],
+    queryFn: () => api.get<BuyerFlags>("/me/flags", { noAuthRedirect: true }),
+    staleTime: 60_000,
+    retry: false,
+    enabled,
   });
 }
 
