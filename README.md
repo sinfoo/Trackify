@@ -1,6 +1,6 @@
-# The Autonomous FinTech Team
+# Trackify, the Autonomous FinTech Team
 
-**TECHX Tunisia 2026–2027 · IEEE CS ENICarthage x ENIT.** Six specialised AI agents run a complete, secured
+**TECHX Tunisia 2026–2027 · IEEE CS ENICarthage x ENIT.** Trackify: six specialised AI agents run a complete, secured
 customer and financial journey for a fictional AI-training academy: they talk to prospects, understand needs
 and objections, run a simulated payment, compute financial KPIs, recommend strategy, and defend every step
 against fraud and prompt injection, with humans approving sensitive actions.
