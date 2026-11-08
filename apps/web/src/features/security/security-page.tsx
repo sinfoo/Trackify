@@ -129,7 +129,7 @@ export function SecurityPage() {
       ),
     },
     { key: "desc", header: "Description", className: "min-w-56 whitespace-normal", cell: (e) => <span className="line-clamp-2 text-[13px] text-t2">{e.description}</span> },
-    { key: "risk", header: "Risk", cell: (e) => (e.risk_score == null ? <span className="text-t3">-</span> : <RiskBar score={Math.round(e.risk_score * 100)} width={48} />) },
+    { key: "risk", header: "Risk", cell: (e) => (e.risk_score == null ? <span className="text-t4">—</span> : <RiskBar score={Math.round(e.risk_score * 100)} width={48} />) },
     { key: "det", header: "Detector", cell: (e) => <Detector value={e.detector} /> },
     { key: "status", header: "Status", cell: (e) => <StatusBadge status={e.status} size="lg" /> },
     { key: "time", header: "Time", align: "right", cell: (e) => <TimeAgo date={e.created_at} className="text-[12.5px] text-t3" /> },

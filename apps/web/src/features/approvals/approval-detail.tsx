@@ -25,7 +25,7 @@ import { Countdown } from "./countdown";
 type Decision = "approve" | "reject" | "request-information";
 const SEV_TONE: Record<string, Tone> = { LOW: "info", MEDIUM: "warning", HIGH: "danger", CRITICAL: "danger" };
 const DECISION: Record<Decision, { title: string; cta: string; done: string }> = {
-  approve: { title: "Approve release", cta: "Approve", done: "Approved. The Payment agent resumes the transaction." },
+  approve: { title: "Approve", cta: "Approve", done: "Approved. The Payment agent resumes the transaction." },
   reject: { title: "Reject", cta: "Reject", done: "Rejected. Payment cancelled and logged." },
   "request-information": { title: "Request info", cta: "Send request", done: "Information requested from the requester." },
 };

@@ -124,20 +124,21 @@ export function DataTable<T>({
         </TableBody>
       </Table>
       {paged && (
-        <div className="flex items-center justify-between gap-2 border-t border-hair bg-panel2 px-5 py-2.5 text-xs font-semibold text-t3">
+        // Prototype list footer: 12px 20px, 12.5 --t3, "Previous" / "Next" 30px hairline buttons.
+        <div className="flex items-center justify-between gap-2 border-t border-hair px-5 py-3 text-[12.5px] text-t3">
           <span className="tabular">
             {loading ? "Loading…" : shown ? `Showing ${from}–${to} of ${total}` : `Showing 0 of ${total}`}
           </span>
           {onPageChange && (
             <div className="flex items-center gap-1.5">
-              <span className="num mr-1">
+              <span className="num mr-1 text-xs whitespace-nowrap">
                 {page} / {pages}
               </span>
-              <Button variant="outline" size="icon-sm" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => onPageChange(page - 1)}>
-                <ChevronLeft aria-hidden />
+              <Button variant="outline" size="sm" className="h-[30px] rounded-lg px-2.5 text-[12.5px] font-bold text-t2" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => onPageChange(page - 1)}>
+                <ChevronLeft aria-hidden className="size-3.5" /> Previous
               </Button>
-              <Button variant="outline" size="icon-sm" aria-label="Next page" disabled={loading || page >= pages} onClick={() => onPageChange(page + 1)}>
-                <ChevronRight aria-hidden />
+              <Button variant="outline" size="sm" className="h-[30px] rounded-lg px-2.5 text-[12.5px] font-bold text-t2" aria-label="Next page" disabled={loading || page >= pages} onClick={() => onPageChange(page + 1)}>
+                Next <ChevronRight aria-hidden className="size-3.5" />
               </Button>
             </div>
           )}

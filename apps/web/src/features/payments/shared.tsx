@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Search } from "lucide-react";
+import { Search, User } from "lucide-react";
 import { AgentAvatar, agentColors, type Column } from "@/components/ui-kit";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -210,6 +210,9 @@ export function ActorCell({ type, id }: { type?: string | null; id: string | nul
   const agent = type === "agent" || id.startsWith("agent:") ? id.replace(/^agent:/, "") : null;
   if (agent) return <WhoCell className="max-w-[220px]" agent={agent} title={`${agent.charAt(0).toUpperCase()}${agent.slice(1)} agent`} sub="agent" />;
   const label = id.replace(/^user:/, "");
+  // Customers are identified by UUID only: show a person tile + short id instead of initials cut from the hash.
+  if (type === "customer" || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(label))
+    return <WhoCell className="max-w-[220px]" icon={{ icon: User, color: "var(--c-customer)", bg: "var(--c-customer-bg)" }} title="Customer" sub={label.slice(0, 8)} subMono />;
   return <WhoCell className="max-w-[220px]" initials={initialsOf(label.split("@")[0].replace(/[._-]/g, " "))} title={label} sub={type ?? "user"} />;
 }
 

@@ -217,7 +217,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
                         <span className="block text-[15px] font-extrabold text-text">{m.label}</span>
                         <span className="mt-0.5 block text-[12.5px] text-t3">{ui.desc}</span>
                       </span>
-                      <span className="inline-flex h-6 items-center rounded-full px-[9px] text-[11.5px] font-extrabold whitespace-nowrap" style={{ background: tile, color: fg }}>
+                      <span className="hidden h-6 items-center rounded-full px-[9px] text-[11.5px] font-extrabold whitespace-nowrap min-[480px]:inline-flex" style={{ background: tile, color: fg }}>
                         {ui.outcome}
                       </span>
                     </label>

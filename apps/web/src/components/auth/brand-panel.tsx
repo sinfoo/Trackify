@@ -65,7 +65,7 @@ export function BrandPanel() {
         <p className="mt-4 text-base leading-[1.55] text-[rgba(243,245,249,.7)]">
           Watch every hand-off live, release or reject held payments, and keep the whole journey traceable.
         </p>
-        <ul className="mt-7 grid grid-cols-3 gap-2.5" aria-label="Agents">
+        <ul className="mt-7 grid grid-cols-2 gap-2.5 sm:grid-cols-3" aria-label="Agents">
           {AGENT_IDS.map((id, i) => {
             const m = AGENT_META[id];
             const Icon = m.icon;

@@ -214,7 +214,7 @@ function RecommendationCard({ rec, canWrite }: { rec: Recommendation; canWrite: 
         <Input aria-label={`Feedback note for ${rec.title}`} placeholder="Optional note for the decision" maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} />
       )}
 
-      <div className="mt-auto flex items-center gap-2.5 border-t border-hair pt-1.5">
+      <div className="mt-auto flex flex-wrap items-center gap-2.5 border-t border-hair pt-1.5">
         <span className="inline-flex items-center gap-2 text-xs text-t3">
           <span className="h-[5px] w-[60px] overflow-hidden rounded-[3px] bg-panel3" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={conf} aria-label="Confidence">
             <span className="block h-full bg-brand" style={{ width: `${conf}%` }} />

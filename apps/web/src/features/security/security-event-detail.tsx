@@ -122,7 +122,7 @@ export function SecurityEventDetail({ id }: { id: string }) {
         <Panel title="Assessment">
           <DetailList
             items={[
-              ["Risk score", e.risk_score == null ? "-" : <RiskScore key="r" value={e.risk_score} />],
+              ["Risk score", e.risk_score == null ? "—" : <RiskScore key="r" value={e.risk_score} />],
               ["Status", <StatusBadge key="s" status={e.status} />],
               ["Raised by", e.agent_id ? AGENT_META[e.agent_id]?.full ?? e.agent_id : "Auth middleware"],
               ["Recommended action", e.recommended_action ? humanize(e.recommended_action) : "None"],

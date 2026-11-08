@@ -32,7 +32,7 @@ export function TimeAgo({ date, className }: { date: string | null | undefined; 
     const t = setInterval(() => tick((n) => n + 1), 30_000);
     return () => clearInterval(t);
   }, []);
-  if (!date) return <span className={className}>-</span>;
+  if (!date) return <span className={cn("text-t4", className)}>—</span>;
   return (
     <time dateTime={date} title={formatDateTime(date)} className={cn("whitespace-nowrap", className)} suppressHydrationWarning>
       {formatRelative(date)}
@@ -185,7 +185,7 @@ export function RiskBar({
       <span className="h-1.5 overflow-hidden rounded-full bg-panel3" style={{ width }} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={v} aria-label="Risk score">
         <span className="block h-full rounded-full transition-[width] duration-500" style={{ width: `${v}%`, background: tone }} />
       </span>
-      {showValue && <span className="num text-xs font-bold" style={{ color: tone }}>{score == null ? "-" : v}</span>}
+      {showValue && <span className="num text-xs font-bold" style={{ color: tone }}>{score == null ? "—" : v}</span>}
     </span>
   );
 }

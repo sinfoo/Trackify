@@ -58,7 +58,7 @@ export function KpiCard({
           </Tooltip>
         )}
       </div>
-      <div className="mt-2 flex items-baseline gap-1.5">
+      <div className="mt-2 flex min-w-0 flex-wrap items-baseline gap-x-1.5">
         {loading ? (
           <Skeleton className="h-7 w-28" />
         ) : (

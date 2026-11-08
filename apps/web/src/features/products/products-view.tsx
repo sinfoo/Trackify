@@ -50,8 +50,9 @@ export function ArchiveButton({ product, size = "xs", onDone }: { product: Produ
     return (
       <Button
         variant={size === "xs" ? "ghost" : "outline"}
-        size={size === "xs" ? "icon-xs" : size}
-        className={size === "default" ? actionBtn : size === "xs" ? "text-t3 hover:text-danger" : undefined}
+        // 36px hit target (README), negative margin keeps the 13px row padding.
+        size={size === "xs" ? "icon" : size}
+        className={size === "default" ? actionBtn : size === "xs" ? "-my-1.5 text-t3 hover:text-danger" : undefined}
         onClick={(e) => {
           stop(e);
           setConfirming(true);
@@ -112,8 +113,8 @@ export function ProductsView() {
               <span className="inline-flex items-center justify-end gap-1">
                 <Button
                   variant="ghost"
-                  size="icon-xs"
-                  className="text-t3 hover:text-text"
+                  size="icon"
+                  className="-my-1.5 text-t3 hover:text-text"
                   onClick={(e) => {
                     e.stopPropagation();
                     setModal({ open: true, product: p });

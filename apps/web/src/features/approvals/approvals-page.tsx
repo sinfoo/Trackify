@@ -71,9 +71,9 @@ export function ApprovalsPage() {
       ),
     },
     { key: "by", header: "Requested by", cell: (a) => <Requester a={a} /> },
-    { key: "customer", header: "Customer", cell: (a) => <span className="text-sm">{a.customer?.full_name ?? "-"}</span> },
-    { key: "amount", header: "Amount", align: "right", cell: (a) => (a.transaction ? <Money value={a.transaction.amount} className="text-[13px]" /> : "-") },
-    { key: "risk", header: "Risk", cell: (a) => (a.risk_score == null ? "-" : <RiskBar score={Math.round(a.risk_score * 100)} width={48} />) },
+    { key: "customer", header: "Customer", cell: (a) => <span className="text-sm">{a.customer?.full_name ?? "—"}</span> },
+    { key: "amount", header: "Amount", align: "right", cell: (a) => (a.transaction ? <Money value={a.transaction.amount} className="text-[13px]" /> : "—") },
+    { key: "risk", header: "Risk", cell: (a) => (a.risk_score == null ? "—" : <RiskBar score={Math.round(a.risk_score * 100)} width={48} />) },
     { key: "status", header: "Status", cell: (a) => <StatusBadge status={a.status} size="lg" /> },
     tab === "queue"
       ? { key: "exp", header: "Expires", align: "right", cell: (a) => <Countdown to={a.expires_at} /> }

@@ -128,7 +128,7 @@ export function AnalyticsView() {
     { key: "conversion_rate", label: "Conversion", value: o && o.conversion_rate.toFixed(1), unit: "%", delta: o && p ? Math.round((o.conversion_rate - p.conversion_rate) * 10) / 10 : null, deltaLabel: " pts" },
     { key: "interactions", label: "Interactions", value: o && formatNumber(o.interactions), delta: o && p ? o.interactions - p.interactions : null, deltaLabel: " vs previous" },
     { key: "avg_transaction_value", label: "Avg transaction", value: o && formatMoney(o.avg_transaction_value, ""), unit: "TND", delta: o && p ? pct(Number(o.avg_transaction_value), Number(p.avg_transaction_value)) : null, deltaLabel: "% vs previous" },
-    { key: "satisfaction", label: "Satisfaction", value: o && (o.satisfaction == null ? "-" : o.satisfaction.toFixed(2)), unit: "/ 5", hint: o && `${formatNumber(o.feedback_count)} reviews` },
+    { key: "satisfaction", label: "Satisfaction", value: o && (o.satisfaction == null ? "—" : o.satisfaction.toFixed(2)), unit: "/ 5", hint: o && `${formatNumber(o.feedback_count)} reviews` },
     {
       key: "forecast",
       label: "Forecast · 7d",

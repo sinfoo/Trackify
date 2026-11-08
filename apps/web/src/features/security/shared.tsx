@@ -2,7 +2,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import { Info, Lock, type LucideIcon } from "lucide-react";
-import { AgentAvatar, BackLink, EmptyState, Eyebrow, PageTitle, RiskBar, TONE_CLASS, TonePill, type Tone } from "@/components/ui-kit";
+import { AgentAvatar, DetailPage as UiDetailPage, EmptyState, Eyebrow, PageTitle, RiskBar, TONE_CLASS, TonePill, type Tone } from "@/components/ui-kit";
 import { can } from "@/lib/permissions";
 import { useMe } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
@@ -25,7 +25,7 @@ export function JsonView({ value, className }: { value: unknown; className?: str
 
 /** Risk score in [0,1] rendered with the ui-kit RiskBar (0-100). */
 export function RiskScore({ value, className }: { value: number | null | undefined; className?: string }) {
-  if (value == null) return <span className="text-t3">-</span>;
+  if (value == null) return <span className="text-t4">—</span>;
   return <RiskBar score={Math.round(Math.max(0, Math.min(1, value)) * 100)} width={48} className={className} />;
 }
 
@@ -66,7 +66,7 @@ export function DetailList({ items, className }: { items: [ReactNode, ReactNode,
         <div key={i} className="contents">
           <dt className="border-t border-hair py-[9px] text-[13px] text-t3">{k}</dt>
           <dd className={cn("min-w-0 border-t border-hair py-[9px] text-right text-[13.5px] font-semibold tabular [overflow-wrap:anywhere]", mono && "font-mono")}>
-            {v ?? "-"}
+            {v ?? "—"}
           </dd>
         </div>
       ))}
@@ -167,33 +167,24 @@ export function DetailPage({
   notice?: ReactNode;
   children: ReactNode;
 }) {
-  const Icon = tile.icon;
+  // One header implementation (ui-kit DetailPage); only the body differs: an auto-fit card grid instead of main + aside.
   return (
-    <div className="anim-rise flex flex-col gap-[18px]">
-      <BackLink href={back}>{backLabel}</BackLink>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-center gap-4">
-          <span className="grid size-14 shrink-0 place-items-center rounded-[18px] text-lg font-extrabold" style={{ background: tile.bg, color: tile.color }}>
-            {Icon ? <Icon aria-hidden className="size-[26px]" strokeWidth={2} /> : tile.initials}
-          </span>
-          <div className="min-w-0">
-            <Eyebrow>{eyebrow}</Eyebrow>
-            <h1 className="mt-0.5 text-[26px] leading-[1.15] font-extrabold tracking-[-0.025em]">{title}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2.5">
-              {pill}
-              {meta.map((m, i) => (
-                <span key={i} className={cn("text-[13px] text-t3", m.mono && "font-mono")}>
-                  {m.text}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-        {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
-      </div>
-      {notice}
+    <UiDetailPage
+      back={{ href: back, label: backLabel }}
+      eyebrow={eyebrow}
+      title={title}
+      tile={tile}
+      badge={pill}
+      meta={meta.map((m, i) => (
+        <span key={i} className={cn(m.mono && "font-mono")}>
+          {m.text}
+        </span>
+      ))}
+      actions={actions}
+      notice={notice}
+    >
       <div className="grid items-start gap-[18px] [grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))]">{children}</div>
-    </div>
+    </UiDetailPage>
   );
 }
 
@@ -228,7 +219,7 @@ export function Chip({ label, count, selected, onClick, className }: { label: Re
 
 /** "agent:payment" -> avatar + name; "user:a@b" / emails -> mono text. */
 export function Actor({ type, id }: { type?: string | null; id: string | null | undefined }) {
-  if (!id) return <span className="text-t3">{type ?? "-"}</span>;
+  if (!id) return <span className="text-t4">{type ?? "—"}</span>;
   const agent = type === "agent" || id.startsWith("agent:") ? id.replace(/^agent:/, "") : null;
   if (agent) return <AgentAvatar agentId={agent} size="sm" showName />;
   return <span className="num text-xs break-all">{id.replace(/^user:/, "")}</span>;
