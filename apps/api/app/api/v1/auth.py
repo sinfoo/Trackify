@@ -158,6 +158,7 @@ def me(user: User = Depends(current_user)):
 
 
 SIGNUP_ROLES = {
+    "buyer": "BUYER",
     "owner": "SUPER_ADMIN",
     "finance": "FINANCE_MANAGER",
     "security": "SECURITY_ANALYST",
@@ -171,7 +172,7 @@ class RegisterIn(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     password: str = Field(min_length=8, max_length=200)
     # Business onboarding (demo self-service). Stored on the user profile; the role is applied below.
-    role: Literal["owner", "finance", "security", "sales", "viewer"] = "viewer"
+    role: Literal["buyer", "owner", "finance", "security", "sales", "viewer"] = "buyer"
     business_name: str = Field("", max_length=120)
     field_of_activity: str = Field("", max_length=80)
     team_size: str = Field("", max_length=20)
@@ -187,12 +188,13 @@ def register(body: RegisterIn, request: Request, response: Response, db: Session
     wanted = SIGNUP_ROLES[body.role]
     if wanted == "SUPER_ADMIN" and not get_settings().self_signup_admin:
         wanted = "VIEWER"
-    role = db.scalar(select(Role).where(Role.name == wanted))
+    names = [wanted] + (["BUYER"] if wanted == "SUPER_ADMIN" else [])  # owners can buy and sell
+    roles = list(db.scalars(select(Role).where(Role.name.in_(names))))
     u = User(
         email=body.email.lower(),
         full_name=body.full_name,
         password_hash=hash_password(body.password),
-        roles=[role] if role else [],
+        roles=roles,
         preferences={
             "business_name": body.business_name,
             "field_of_activity": body.field_of_activity,

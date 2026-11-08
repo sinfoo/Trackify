@@ -69,6 +69,11 @@ def client():
         yield c
 
 
+def as_buyer(client: TestClient):
+    """Buying needs a buyer account: sign the shared client in as the demo buyer."""
+    return login(client, "buyer@demo.techx")
+
+
 def login(client: TestClient, email: str, password: str = PASSWORD):
     r = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert r.status_code == 200, r.text

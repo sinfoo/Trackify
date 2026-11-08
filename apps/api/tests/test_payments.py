@@ -3,7 +3,7 @@
 from decimal import Decimal
 
 import pytest
-from conftest import checkout, new_customer, product
+from conftest import as_buyer, checkout, new_customer, product
 from sqlalchemy import func, select
 
 from app.core.errors import AppError
@@ -109,6 +109,7 @@ def _public_checkout(client, db, slug="genai-llm"):
     conv_id, token = r.json()["conversation_id"], r.json()["access_token"]
     pid = str(product(db, slug).id)
     db.rollback()  # release the read snapshot before the API writes
+    as_buyer(client)
     r = client.post(
         f"/api/v1/public/conversations/{conv_id}/enroll",
         json={"product_id": pid},

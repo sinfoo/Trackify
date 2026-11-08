@@ -6,6 +6,7 @@ from app.api.v1 import (
     auth,
     customers,
     demo,
+    me,
     orders,
     payments,
     products,
@@ -19,6 +20,7 @@ from app.api.v1 import (
 ROUTERS = [
     auth.router,
     public.router,
+    me.router,
     agents.router,
     demo.router,
     users.router,

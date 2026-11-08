@@ -219,3 +219,17 @@ payments:{...}, voice:{stt:"browser",tts:"browser"}, environment}` (never keys).
   enrollments: [{order_id, order_reference, order_status, created_at, product:{id,slug,name,duration_weeks,level,category},
   amount, currency, enrollment_status, payment:{transaction_reference,status,method,paid_at,failure_reason,session_id,
   checkout_open}|null, progress:[{key,label,state: done|pending|held|failed|upcoming, detail?}]}], journey}`.
+
+## Buyer accounts (Fiverr-style two sides)
+
+- Role `BUYER` with permission `buyer:self`. Public `POST /auth/register` defaults to `role: "buyer"`; `owner` sign-up
+  gets `SUPER_ADMIN` + `BUYER` (can buy and sell). `customers.user_id` links a customer record to its buyer account.
+- Buying needs a buyer account: `POST /public/conversations/{id}/enroll` returns 401 `BUYER_ACCOUNT_REQUIRED` for
+  guests (403 for staff-only accounts); when a buyer enrolls, the guest conversation's customer is attached to (or
+  merged into) the buyer's customer. `POST /public/checkout/{id}/pay` on a buyer-owned order requires that buyer
+  (401 / 403 `NOT_YOUR_ORDER`).
+- `GET /me/account` [buyer:self] -> `{user:{id,full_name,email,is_buyer,is_seller,roles}, customer, recommended[],
+  library[] (ACTIVE enrollments), arriving[] (pending / under review), orders[] (all, with payment + progress),
+  conversations[], journey}`; `POST /me/link-conversation {conversation_id, access_token}` attaches a guest chat;
+  `GET /me/flags` -> `{is_buyer,is_seller,roles}` for the buy/sell switch.
+- Demo buyer: `buyer@demo.techx` / `Demo!2026` (owns a paid enrollment).

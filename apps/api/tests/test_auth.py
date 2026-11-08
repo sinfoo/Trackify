@@ -79,7 +79,7 @@ def test_register_creates_viewer(client):
     r = client.post(
         f"{A}/register", json={"email": "new.user@example.com", "full_name": "New User", "password": "longenough123"}
     )
-    assert r.status_code == 201 and r.json()["roles"] == ["VIEWER"]
+    assert r.status_code == 201 and r.json()["roles"] == ["BUYER"]  # public sign-up = buyer
     assert (
         client.post(
             f"{A}/register", json={"email": "new.user@example.com", "full_name": "Again", "password": "longenough123"}
@@ -103,7 +103,7 @@ def test_register_business_owner_is_signed_in_with_profile(client):
             "phone": "+216 20 000 000",
         },
     )
-    assert r.status_code == 201 and r.json()["roles"] == ["SUPER_ADMIN"]
+    assert r.status_code == 201 and r.json()["roles"] == ["BUYER", "SUPER_ADMIN"]  # owners buy and sell
     assert r.json()["business_name"] == "NewBiz Academy"
     assert "access_token" in r.cookies  # signed in right away
     assert client.get(f"{A}/me").json()["email"] == "owner@newbiz.com"

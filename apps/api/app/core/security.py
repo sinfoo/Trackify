@@ -78,6 +78,7 @@ PERMISSIONS: dict[str, str] = {
     "events:read": "Receive the live event stream",
     "settings:read": "View system settings",
     "settings:write": "Change system settings",
+    "buyer:self": "Buy programs and manage own library and receipts",
 }
 
 _ALL = set(PERMISSIONS)
@@ -114,4 +115,5 @@ ROLES: dict[str, tuple[str, set[str]]] = {
         },
     ),
     "VIEWER": ("Read-only", _READ - {"users:read", "audit:read", "settings:read"}),
+    "BUYER": ("Buys programs: own library, orders and receipts", {"buyer:self"}),
 }

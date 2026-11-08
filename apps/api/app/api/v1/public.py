@@ -166,9 +166,20 @@ class EnrollIn(BaseModel):
 
 @router.post("/conversations/{conv_id}/enroll")
 def enroll(
-    conv_id: uuid.UUID, body: EnrollIn, x_conversation_token: str | None = Header(None), db: Session = Depends(get_db)
+    conv_id: uuid.UUID,
+    body: EnrollIn,
+    request: Request,
+    x_conversation_token: str | None = Header(None),
+    db: Session = Depends(get_db),
 ):
+    """Buying needs a buyer account: the guest conversation is attached to the signed-in buyer here."""
+    from app.core.deps import token_from_request, user_from_token
+    from app.services import buyers
+
     conv = _conv(db, conv_id, x_conversation_token)
+    user = buyers.require_buyer(user_from_token(db, token_from_request(request)))
+    buyers.attach(db, conv.customer, user)
+    db.refresh(conv)
     ps = orchestrator.request_enrollment(db, conv, body.product_id)
     db.commit()
     return {"checkout_session_id": str(ps.id)}
@@ -217,12 +228,22 @@ class PayIn(BaseModel):
 def pay(
     session_id: uuid.UUID,
     body: PayIn,
+    request: Request,
     idempotency_key: str = Header(..., min_length=8, max_length=80),
     db: Session = Depends(get_db),
 ):
+    from app.core.deps import token_from_request, user_from_token
+
     ps = db.get(PaymentSession, session_id)
     if not ps:
         raise not_found("Checkout session")
+    owner_id = ps.order.customer.user_id
+    if owner_id is not None:  # a buyer's checkout can only be paid by that buyer
+        user = user_from_token(db, token_from_request(request))
+        if not user:
+            raise AppError(401, "BUYER_ACCOUNT_REQUIRED", "Sign in to pay for this order.")
+        if user.id != owner_id:
+            raise AppError(403, "NOT_YOUR_ORDER", "This checkout belongs to another account.")
     result = orchestrator.process_payment(db, ps, body.payment_method, idempotency_key)
     db.commit()
     return result

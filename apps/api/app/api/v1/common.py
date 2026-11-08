@@ -288,6 +288,7 @@ def latest_insight(db: Session, customer_id) -> CustomerInsight | None:
 
 def customer_out(c: Customer, db: Session) -> dict:
     ins = latest_insight(db, c.id)
+    has_account = c.user_id is not None
     spent = db.scalar(
         select(func.sum(Transaction.amount)).where(
             Transaction.customer_id == c.id, Transaction.status == TxStatus.SUCCEEDED
@@ -295,6 +296,7 @@ def customer_out(c: Customer, db: Session) -> dict:
     )
     orders = db.scalar(select(func.count(Order.id)).where(Order.customer_id == c.id)) or 0
     return {
+        "has_account": has_account,
         "id": str(c.id),
         "full_name": c.full_name,
         "email": c.email,

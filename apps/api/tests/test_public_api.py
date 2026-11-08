@@ -3,7 +3,7 @@
 import uuid
 
 import pytest
-from conftest import product
+from conftest import as_buyer, product
 
 P = "/api/v1/public"
 
@@ -40,6 +40,7 @@ def test_checkout_is_simulated_and_has_no_risk_fields(client, db):
     conv_id, h = _start(client)
     pid = str(product(db, "intro-ai").id)
     db.rollback()
+    as_buyer(client)
     sid = client.post(f"{P}/conversations/{conv_id}/enroll", json={"product_id": pid}, headers=h).json()[
         "checkout_session_id"
     ]
@@ -83,6 +84,7 @@ def test_buyer_account_shows_recommendations_enrollments_and_progress(client, db
     assert [p["slug"] for p in acc["recommended"]] == ["cybersecurity"] and acc["enrollments"] == []
     pid = str(product(db, "cybersecurity").id)
     db.rollback()
+    as_buyer(client)
     sid = client.post(f"/api/v1/public/conversations/{cid}/enroll", json={"product_id": pid}, headers=h).json()[
         "checkout_session_id"
     ]

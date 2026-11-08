@@ -133,6 +133,10 @@ class Customer(UUIDPk, Timestamped, Base):
     consent_voice: Mapped[bool] = mapped_column(Boolean, default=False)
     is_fictional: Mapped[bool] = mapped_column(Boolean, default=True)
     journey_stage: Mapped[str] = mapped_column(String(40), default="NEW")
+    # Buyer account that owns this customer record (guests have none).
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
 
 
 class Conversation(UUIDPk, Timestamped, Base):

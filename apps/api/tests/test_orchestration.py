@@ -3,7 +3,7 @@
 import uuid
 
 import pytest
-from conftest import checkout, product
+from conftest import as_buyer, checkout, product
 from sqlalchemy import func, select
 
 from app.models import (
@@ -24,6 +24,7 @@ SIX = {"sales", "intelligence", "security", "payment", "analyst", "strategy"}
 
 
 def _start(client):
+    as_buyer(client)
     r = client.post(
         "/api/v1/public/conversations", json={"full_name": "Sami Journey", "consent_voice": False, "channel": "text"}
     )

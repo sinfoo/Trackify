@@ -37,7 +37,7 @@ def test_users_rbac(client):
     assert client.get(f"{V}/users").status_code == 403
     as_(client, "admin@demo.techx")
     body = client.get(f"{V}/users").json()
-    assert PAGED <= set(body) and body["total"] == 5
+    assert PAGED <= set(body) and body["total"] == 6
     assert all("password_hash" not in u for u in body["items"])
 
 

@@ -42,6 +42,7 @@ DEMO_USERS = [
     ("security@demo.techx", "Leila Mansouri", "SECURITY_ANALYST"),
     ("sales@demo.techx", "Youssef Trabelsi", "SALES_MANAGER"),
     ("viewer@demo.techx", "Nour Haddad", "VIEWER"),
+    ("buyer@demo.techx", "Yasmine Trabelsi", "BUYER"),
 ]
 
 PRODUCTS = [
@@ -512,6 +513,12 @@ def seed_activity(db: Session, n_customers: int = 42) -> dict:
     tx = db.scalar(
         select(Transaction).where(Transaction.status == TxStatus.SUCCEEDED).order_by(Transaction.created_at.desc())
     )
+    # The demo buyer owns the customer behind the most recent successful purchase: a ready-made library.
+    buyer = db.scalar(select(User).where(User.email == "buyer@demo.techx"))
+    if tx and buyer:
+        tx.customer.user_id = buyer.id
+        tx.customer.full_name, tx.customer.email = buyer.full_name, buyer.email
+        db.commit()
     finance = db.scalar(select(User).where(User.email == "finance@demo.techx"))
     if tx:
         orchestrator.request_refund(db, tx, finance, "Customer moved abroad before cohort start (fictional)")
