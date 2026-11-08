@@ -4,15 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleCheck, CircleX, Loader2, MessageCircle, Receipt, RotateCcw, Star } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { EmptyState, Money, SimulatedBadge } from "@/components/ui-kit";
-import type { CheckoutSession } from "@/lib/types";
+import { Check, Loader2, MessageCircle, Receipt, RotateCcw, Star, X } from "lucide-react";
+import { EmptyState } from "@/components/ui-kit";
 import { ApiError } from "@/lib/api";
+import { formatMoney } from "@/lib/format";
+import type { CheckoutSession } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { loadSession, publicApi, type StoredSession } from "@/features/public/api";
+import "@/features/public/public.css";
+
+const PRIMARY = "inline-flex h-12 items-center gap-2 rounded-[14px] bg-brand px-5 text-[14.5px] font-extrabold text-on-brand no-underline hover:no-underline [&_svg]:size-[15px]";
+const GHOST = "inline-flex h-12 items-center gap-2 rounded-[14px] border border-hair bg-panel px-5 text-[14.5px] font-extrabold text-text no-underline hover:bg-panel2 hover:no-underline [&_svg]:size-[15px]";
 
 export function SuccessView({ reference, session }: { reference?: string; session?: string }) {
   const router = useRouter();
@@ -36,78 +38,60 @@ export function SuccessView({ reference, session }: { reference?: string; sessio
   if (!session && !reference)
     return (
       <EmptyState
-        className="mx-auto max-w-2xl"
+        className="mx-auto max-w-[640px]"
         icon={Receipt}
         title="No receipt to show"
         description="This page shows your confirmation right after a payment. Enroll in a program to get one."
         action={
-          <Button asChild>
-            <Link href="/offers">See programs</Link>
-          </Button>
+          <Link href="/offers" className={PRIMARY}>
+            See programs
+          </Link>
         }
       />
     );
   if (session && !receipt && !failed)
     return (
-      <p role="status" className="mx-auto flex max-w-2xl items-center gap-2 text-muted-foreground">
+      <p role="status" className="mx-auto flex max-w-[640px] items-center justify-center gap-2 text-t3">
         <Loader2 aria-hidden className="size-4 animate-spin" /> Loading your receipt
       </p>
     );
+  const rows: [string, string, boolean][] = receipt
+    ? [
+        ["Program", `${receipt.product.name} · ${receipt.product.duration_weeks} weeks · ${receipt.product.level}`, false],
+        ["Amount", `${formatMoney(receipt.amount, receipt.currency, { trim: true })} · simulated`, false],
+        ["Order", receipt.order_reference, true],
+        ["Transaction", reference ?? receipt.transaction_reference ?? "", true],
+      ]
+    : [["Transaction", reference ?? "", true]];
   return (
-    <div className="mx-auto grid max-w-2xl gap-8">
-      <section className="rounded-xl border bg-card p-6 md:p-8">
-        <span className="inline-flex size-12 items-center justify-center rounded-full bg-success/12 text-success-text">
-          <CircleCheck aria-hidden className="size-6" />
-        </span>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight">You are enrolled</h1>
-          <SimulatedBadge />
-        </div>
-        <p className="mt-2 text-muted-foreground">
-          The payment went through in the simulator and your seat is reserved. No real money moved.
-        </p>
-        {receipt ? (
-          <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-lg border bg-muted/40 p-4 text-sm">
-            <dt className="text-muted-foreground">Program</dt>
-            <dd className="font-medium">
-              {receipt.product.name}
-              <span className="font-normal text-muted-foreground">
-                {" "}· {receipt.product.duration_weeks} weeks · {receipt.product.level}
-              </span>
-            </dd>
-            <dt className="text-muted-foreground">Amount</dt>
-            <dd>
-              <Money trim value={receipt.amount} currency={receipt.currency} className="font-semibold" />
-            </dd>
-            <dt className="text-muted-foreground">Order</dt>
-            <dd className="num">{receipt.order_reference}</dd>
-            <dt className="text-muted-foreground">Transaction</dt>
-            <dd className="num">{reference ?? receipt.transaction_reference}</dd>
-          </dl>
-        ) : (
-          reference && (
-            <p className="mt-4">
-              Transaction reference <span className="num font-semibold">{reference}</span>
-            </p>
-          )
-        )}
-        <h2 className="mt-6 font-semibold">What happens next</h2>
-        <ol className="mt-2 grid list-decimal gap-1 pl-5 text-muted-foreground">
-          <li>The analyst agent adds this enrollment to the academy&apos;s numbers.</li>
-          <li>The team sends your welcome pack and schedule (fictional in this demo).</li>
-          <li>Questions about the program? The assistant is still on.</li>
-        </ol>
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Button asChild size="lg" className="px-4">
-            <Link href="/assistant">
-              <MessageCircle aria-hidden /> Ask the assistant
-            </Link>
-          </Button>
-          <Button asChild size="lg" variant="outline" className="px-4">
-            <Link href="/offers">Browse other programs</Link>
-          </Button>
-        </div>
-      </section>
+    <div className="anim-rise mx-auto max-w-[640px] text-center">
+      <span className="relative inline-grid size-24 place-items-center rounded-full bg-success-bg [animation:popIn_.6s_cubic-bezier(.34,1.45,.64,1)_both]">
+        <span aria-hidden className="orb-ring absolute -inset-2.5 rounded-full border-2 border-success opacity-40" />
+        <Check aria-hidden className="size-11 text-success" strokeWidth={2.6} />
+      </span>
+      <h1 className="mt-6 text-4xl font-extrabold tracking-[-.035em]">You are enrolled.</h1>
+      <p className="mt-2.5 text-base leading-[1.5] text-t2">
+        The simulated payment{receipt ? <> for <span className="font-extrabold text-text">{receipt.product.name}</span></> : null} went through. A confirmation would
+        normally land in your inbox; here, nothing is sent.
+      </p>
+      <div className="mx-auto mt-[26px] max-w-[460px] rounded-3xl border border-hair bg-panel p-5 text-left shadow-card">
+        <dl className="grid gap-2.5 text-[13.5px]">
+          {rows.map(([l, v, mono]) => (
+            <div key={l} className="flex justify-between gap-4">
+              <dt className="shrink-0 text-t3">{l}</dt>
+              <dd className={cn("text-right font-bold", mono ? "mono" : "tabular")}>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="mt-[22px] flex flex-wrap justify-center gap-2.5">
+        <Link href="/offers" className={GHOST}>
+          Browse more programs
+        </Link>
+        <Link href="/assistant" className={PRIMARY}>
+          <MessageCircle aria-hidden /> Ask the assistant
+        </Link>
+      </div>
       <FeedbackForm />
     </div>
   );
@@ -133,7 +117,7 @@ function FeedbackForm() {
 
   if (state === "sent")
     return (
-      <p role="status" className="rounded-xl border bg-card p-5 text-center">
+      <p role="status" className="mx-auto mt-6 max-w-[460px] rounded-3xl border border-hair bg-panel p-5 text-[13.5px] text-t2">
         Thanks for the feedback. It goes straight to the analyst agent&apos;s satisfaction score.
       </p>
     );
@@ -154,85 +138,68 @@ function FeedbackForm() {
   };
 
   return (
-    <form onSubmit={submit} className="rounded-xl border bg-card p-6">
+    <form onSubmit={submit} className="mx-auto mt-6 max-w-[460px] rounded-3xl border border-hair bg-panel p-5 text-left shadow-card">
       <fieldset>
-        <legend className="font-semibold">How was your experience?</legend>
+        <legend className="text-[15px] font-extrabold">Rate the assistant</legend>
+        <p className="mt-0.5 text-[12.5px] text-t3">One rating per conversation. It feeds the analyst agent&apos;s satisfaction score.</p>
         <div className="mt-3 flex gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
-            <label key={n} className="cursor-pointer rounded-md p-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
-              <input
-                type="radio"
-                name="rating"
-                value={n}
-                checked={rating === n}
-                onChange={() => setRating(n)}
-                className="sr-only"
-                aria-label={`${n} star${n > 1 ? "s" : ""}`}
-              />
-              <Star
-                aria-hidden
-                className={cn("size-8 transition-colors duration-150", n <= rating ? "fill-primary text-primary" : "text-muted-foreground")}
-              />
+            <label key={n} className="cursor-pointer rounded-lg p-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-brand/35">
+              <input type="radio" name="rating" value={n} checked={rating === n} onChange={() => setRating(n)} className="sr-only" aria-label={`${n} star${n > 1 ? "s" : ""}`} />
+              <Star aria-hidden className={cn("size-8 transition-colors duration-150", n <= rating ? "fill-brand text-brand" : "text-t4")} />
             </label>
           ))}
         </div>
       </fieldset>
-      <Label htmlFor="fb-comment" className="mt-4 block">
+      <label htmlFor="fb-comment" className="mt-4 block text-[13px] font-bold text-t2">
         Anything to add? (optional)
-      </Label>
-      <Textarea id="fb-comment" value={comment} onChange={(e) => setComment(e.target.value)} maxLength={1000} className="mt-1.5" />
+      </label>
+      <textarea
+        id="fb-comment"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        maxLength={1000}
+        className="mt-1.5 min-h-[72px] w-full rounded-xl border border-hair bg-input px-3 py-2.5 text-sm text-text outline-none placeholder:text-t4 focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/35"
+      />
       {error && (
-        <p role="alert" className="mt-2 text-sm text-danger-text">
+        <p role="alert" className="mt-2 text-[13px] font-semibold text-danger">
           {error}
         </p>
       )}
-      <Button type="submit" className="mt-4" disabled={!rating || state === "sending"}>
+      <button type="submit" className={cn(PRIMARY, "mt-4 h-11 disabled:pointer-events-none disabled:opacity-50")} disabled={!rating || state === "sending"}>
         {state === "sending" && <Loader2 aria-hidden className="animate-spin" />}
         Send feedback
-      </Button>
+      </button>
     </form>
   );
 }
 
 export function PaymentFailedView({ session, reason }: { session?: string; reason?: string }) {
   return (
-    <section className="mx-auto max-w-2xl rounded-xl border bg-card p-6 md:p-8">
-      <span className="inline-flex size-12 items-center justify-center rounded-full bg-danger/12 text-danger-text">
-        <CircleX aria-hidden className="size-6" />
+    <div className="anim-rise mx-auto max-w-[640px] text-center">
+      <span className="inline-grid size-24 place-items-center rounded-full bg-danger-bg [animation:popIn_.6s_cubic-bezier(.34,1.45,.64,1)_both]">
+        <X aria-hidden className="size-11 text-danger" strokeWidth={2.6} />
       </span>
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">The payment did not go through</h1>
-        <SimulatedBadge />
-      </div>
-      <p className="mt-2 text-muted-foreground">
-        {reason || "The test method was declined."} Nothing was charged, and your order is still open.
+      <h1 className="mt-6 text-4xl font-extrabold tracking-[-.035em]">The payment did not go through.</h1>
+      <p className="mt-2.5 text-base leading-[1.5] text-t2">
+        The simulator declined the test method: <span className="font-extrabold text-text">{(reason || "declined by the simulator").replace(/\.$/, "")}</span>. Nothing was
+        charged and your seat is still held while the checkout stays open.
       </p>
-      <h2 className="mt-6 font-semibold">What you can do</h2>
-      <ul className="mt-2 grid list-disc gap-1 pl-5 text-muted-foreground">
-        <li>Try again with another test method on the same order.</li>
-        <li>Ask the assistant about payment options or a different program.</li>
-      </ul>
-      <p className="mt-3 text-sm text-muted-foreground">
-        Several failed attempts in a row get flagged by the security agent and held for a human to review.
-      </p>
-      <div className="mt-6 flex flex-wrap gap-2">
+      <p className="mt-3 text-[13px] text-t3">Several failed attempts in a row get flagged by the security agent and held for a human to review.</p>
+      <div className="mt-[26px] flex flex-wrap justify-center gap-2.5">
         {session ? (
-          <Button asChild size="lg" className="px-4">
-            <Link href={`/checkout/${encodeURIComponent(session)}`}>
-              <RotateCcw aria-hidden /> Try another method
-            </Link>
-          </Button>
-        ) : (
-          <Button asChild size="lg" className="px-4">
-            <Link href="/offers">See programs</Link>
-          </Button>
-        )}
-        <Button asChild size="lg" variant="outline" className="px-4">
-          <Link href="/assistant">
-            <MessageCircle aria-hidden /> Talk to the assistant
+          <Link href={`/checkout/${encodeURIComponent(session)}`} className={PRIMARY}>
+            <RotateCcw aria-hidden strokeWidth={2.4} /> Try another method
           </Link>
-        </Button>
+        ) : (
+          <Link href="/offers" className={PRIMARY}>
+            See programs
+          </Link>
+        )}
+        <Link href="/assistant" className={GHOST}>
+          <MessageCircle aria-hidden /> Ask the assistant
+        </Link>
       </div>
-    </section>
+    </div>
   );
 }

@@ -1,0 +1,42 @@
+/* Prototype keyframes used only by the assistant (globals.css holds the shared set). */
+@keyframes orb {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+@keyframes ring {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes bar {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.orb-idle {
+  animation: orb 2.4s ease-in-out infinite;
+}
+.orb-ring {
+  animation: ring 1.6s ease-out infinite;
+}
+.orb-bar {
+  animation: bar 0.9s ease-in-out infinite;
+  transform-origin: center;
+}
+.typing-dot {
+  animation: orb 1s infinite;
+}

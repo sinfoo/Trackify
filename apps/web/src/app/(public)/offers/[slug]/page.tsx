@@ -5,7 +5,7 @@ export const metadata = { title: "Program" };
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-10 md:px-6">
+    <div className="anim-rise mx-auto w-full max-w-[1180px] px-6 pt-10 pb-[72px]">
       <OfferDetail slug={slug} />
     </div>
   );

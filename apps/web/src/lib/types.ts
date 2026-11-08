@@ -243,6 +243,30 @@ export interface PayResponse {
   idempotent_replay?: boolean;
 }
 
+/** GET /public/business: read-only business profile shown on every buyer-facing surface. */
+export interface BusinessPublic {
+  name: string;
+  legal_name: string;
+  tagline: string;
+  about: string;
+  founded: string;
+  city: string;
+  address: string;
+  phone: string;
+  email: string;
+  support_email: string;
+  website: string;
+  registration: string;
+  tax_id: string;
+  refund_policy: string;
+  learners: string;
+  instructors: string;
+  rating: string;
+  accreditations: string[];
+  support_hours: string;
+  updated_at?: ISODate;
+}
+
 // ---------- Demo ----------
 export type DemoScenarioId =
   | "successful_journey"
