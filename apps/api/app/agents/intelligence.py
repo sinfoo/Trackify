@@ -1,6 +1,7 @@
 """Customer Intelligence Agent: rules-based NLP, optionally refined by an LLM."""
 
 import re
+import unicodedata
 import uuid
 
 from pydantic import BaseModel, Field
@@ -12,8 +13,32 @@ from app.models import Conversation, Customer, CustomerInsight, Product, Product
 
 OBJECTION_TERMS: dict[str, list[str]] = {
     "price": ["expensive", "price", "cost", "cheaper", "discount", "afford", "budget", "too much", "cher", "prix"],
-    "time_constraints": ["no time", "busy", "schedule", "too long", "weeks is", "evening", "weekend", "pas le temps"],
-    "trust": ["legit", "trust", "scam", "reviews", "accredited", "recognized", "guarantee", "who teaches"],
+    "time_constraints": [
+        "no time",
+        "busy",
+        "schedule",
+        "too long",
+        "weeks is",
+        "evening",
+        "weekend",
+        "pas le temps",
+        "horaire",
+        "emploi du temps",
+        "trop long",
+    ],
+    "trust": [
+        "legit",
+        "trust",
+        "scam",
+        "reviews",
+        "accredited",
+        "recognized",
+        "guarantee",
+        "who teaches",
+        "certificat reconnu",
+        "fiable",
+        "avis",
+    ],
     "missing_information": [
         "syllabus",
         "prerequisite",
@@ -21,6 +46,9 @@ OBJECTION_TERMS: dict[str, list[str]] = {
         "what exactly",
         "how does it work",
         "curriculum",
+        "programme detaille",
+        "prerequis",
+        "plus de details",
     ],
     "product_relevance": ["not relevant", "don't need", "not for me", "already know", "not useful"],
     "technical_difficulty": [
@@ -31,8 +59,23 @@ OBJECTION_TERMS: dict[str, list[str]] = {
         "too advanced",
         "beginner",
         "never coded",
+        "difficile",
+        "jamais code",
+        "pas d'experience",
+        "debutant",
     ],
-    "payment_concerns": ["installment", "payment plan", "pay later", "secure payment", "refund", "pay in"],
+    "payment_concerns": [
+        "installment",
+        "payment plan",
+        "pay later",
+        "secure payment",
+        "refund",
+        "pay in",
+        "en plusieurs fois",
+        "facilites de paiement",
+        "paiement securise",
+        "tranches",
+    ],
 }
 POSITIVE = [
     "great",
@@ -52,6 +95,10 @@ POSITIVE = [
     "merci",
     "parfait",
     "happy",
+    "genial",
+    "super interessant",
+    "top",
+    "bien",
 ]
 NEGATIVE = [
     "bad",
@@ -68,6 +115,10 @@ NEGATIVE = [
     "no thanks",
     "unfortunately",
     "frustrated",
+    "decu",
+    "trop cher",
+    "inquiet",
+    "pas sur",
 ]
 PURCHASE = [
     "enroll",
@@ -86,6 +137,11 @@ PURCHASE = [
     "join the",
     "m'inscrire",
     "inscription",
+    "je m'inscris",
+    "je veux m'inscrire",
+    "acheter",
+    "je prends",
+    "reserver ma place",
 ]
 INTEREST = [
     "interested",
@@ -99,8 +155,24 @@ INTEREST = [
     "i want to learn",
     "career",
     "want to become",
+    "interesse",
+    "je cherche",
+    "j'aimerais apprendre",
+    "je voudrais apprendre",
+    "reconversion",
 ]
-REJECT = ["not interested", "no thanks", "maybe later", "not now", "too expensive for me", "i'll pass", "goodbye"]
+REJECT = [
+    "not interested",
+    "no thanks",
+    "maybe later",
+    "not now",
+    "too expensive for me",
+    "i'll pass",
+    "goodbye",
+    "pas interesse",
+    "non merci",
+    "plus tard",
+]
 NEEDS = {
     "career_change": ["career", "new job", "switch", "become a", "job market"],
     "upskilling": ["improve", "upskill", "promotion", "at work", "my team", "current job"],
@@ -121,15 +193,17 @@ def _hits(text: str, terms: list[str]) -> int:
 
 
 def _norm(text: str) -> str:
-    return re.sub(r"\s+", " ", text.lower())
+    """Lowercase, collapse spaces, strip accents (so "cybersécurité" matches "cybersecurite")."""
+    t = unicodedata.normalize("NFKD", text.lower())
+    return re.sub(r"\s+", " ", "".join(c for c in t if not unicodedata.combining(c)))
 
 
 def match_products(text: str, products: list[Product]) -> list[tuple[Product, int]]:
     t = _norm(text)
     scored = []
     for p in products:
-        score = sum(2 if kw.lower() in t else 0 for kw in p.keywords)
-        score += 3 if p.name.lower() in t else 0
+        score = sum(2 if _norm(kw) in t else 0 for kw in p.keywords)
+        score += 3 if _norm(p.name) in t else 0
         if score:
             scored.append((p, score))
     return sorted(scored, key=lambda x: -x[1])

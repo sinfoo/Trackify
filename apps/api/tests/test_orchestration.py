@@ -249,3 +249,44 @@ def test_unrelated_message_gets_no_product_cards(client):
     conv_id, h = _start(client)
     reply = _say(client, conv_id, h, "What time zone are you in?")[-1]
     assert "products" not in reply["meta"] and "cta" not in reply["meta"]
+
+
+def test_enroll_after_comparison_asks_which_program(client):
+    conv_id, h = _start(client)
+    _say(client, conv_id, h, "Tell me about cybersecurity")
+    cmp_ = _say(client, conv_id, h, "Compare data science and full stack for me")[-1]
+    assert len(cmp_["meta"]["products"]) == 2
+    ask = _say(client, conv_id, h, "Je veux m'inscrire")[-1]
+    assert "cta" not in ask["meta"] and "Which one" in ask["content"]
+    pick = _say(client, conv_id, h, "I want to enroll in data science")[-1]
+    assert pick["meta"]["cta"]["label"] == "Enroll in Data Science & Analytics"
+
+
+def _insight(db, conv_id):
+    from app.models import CustomerInsight
+
+    db.expire_all()
+    return db.scalar(select(CustomerInsight).where(CustomerInsight.conversation_id == uuid.UUID(conv_id)))
+
+
+def test_chatting_after_purchase_keeps_insight_purchased(client, db):
+    conv_id, h = _start(client)
+    _say(client, conv_id, h, "Hello, I want to learn generative AI and LLM apps for my job.")
+    _say(client, conv_id, h, "Sounds great, I want to enroll.")
+    assert _enroll_and_pay(client, db, conv_id, h, "sim_card_success")["status"] == "SUCCEEDED"
+    assert _insight(db, conv_id).journey_stage == "PURCHASED"
+    db.rollback()
+    _say(client, conv_id, h, "Thanks! When does it start? It looks a bit expensive though.")
+    ins = _insight(db, conv_id)
+    assert ins.journey_stage == "PURCHASED"
+    assert float(ins.purchase_intent) == 1.0
+
+
+def test_recommendation_request_is_not_routed_to_low_intent(client, db):
+    conv_id, h = _start(client)
+    _say(client, conv_id, h, "Hi! I work in marketing and want to get into AI, I never coded. Is that a problem?")
+    _say(client, conv_id, h, "What would you recommend for me?")
+    db.expire_all()
+    wf = db.scalar(select(Workflow).where(Workflow.conversation_id == uuid.UUID(conv_id)))
+    assert wf.context["recommended_product_id"]
+    assert wf.state == WorkflowState.PRODUCT_RECOMMENDATION

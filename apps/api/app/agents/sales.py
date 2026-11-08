@@ -115,14 +115,36 @@ RECOMMEND_ASK = (
     "where should i start",
     "what do you advise",
 )
-BROWSE_ASK = ("offers", "courses", "catalog", "programs", "programmes", "what do you offer", "what do you have")
+BROWSE_ASK = (
+    "offers",
+    "courses",
+    "catalog",
+    "programs",
+    "programmes",
+    "what do you offer",
+    "what do you have",
+    "formations",
+    "catalogue",
+    "vos programmes",
+)
+RECOMMEND_ASK += ("conseill", "recommand", "quelle formation")
+# French cues (accents stripped by ci._norm), checked with the English ones above.
+PROFILE_FR: dict[str, tuple[str, ...]] = {
+    "ai-leadership": ("dirigeant", "directeur", "chef d'equipe", "mon entreprise"),
+    "intro-ai": ("jamais code", "pas technique", "debutant", "aucune experience", "etudiant"),
+    "data-science": ("analyste", "tableaux de bord", "statistiques"),
+    "cybersecurity": ("securite", "reseau"),
+    "fullstack": ("site web", "application web"),
+    "advanced-ml": ("apprentissage profond",),
+    "genai-llm": ("developpeur", "programmeur", "ingenieur logiciel", "automatiser"),
+}
 
 
 def recommend_for(text: str, products: list[Product]) -> Product | None:
-    t = text.lower()
+    t = ci._norm(text)
     by_slug = {p.slug: p for p in products}
     for slug, cues in PROFILE_RULES:
-        if slug in by_slug and any(c in t for c in cues):
+        if slug in by_slug and any(c in t for c in cues + PROFILE_FR.get(slug, ())):
             return by_slug[slug]
     return None
 
@@ -153,7 +175,7 @@ def playbook(
         now_matches[0][0] if now_matches else last_pitched or (all_matches[0][0] if all_matches else None) or profile
     )
     objections = ci.detect_objections(latest)
-    low = latest.lower()
+    low = ci._norm(latest)
     meta: dict = {}
     # Don't re-pitch: products already shown in the last agent replies get no new card / button.
     recent = [m for m in history if m.role == "agent"][-3:]
@@ -167,9 +189,20 @@ def playbook(
             out["cta"] = {"type": "enroll", "product_id": pid, "label": f"Enroll in {p.name}"}
         return out
 
+    last_agent = next((m for m in reversed(history) if m.role == "agent"), None)
+    compared = (
+        [by_id[c["id"]] for c in ((last_agent.meta or {}).get("products") or []) if c["id"] in by_id]
+        if last_agent
+        else []
+    )
     if ci.rejection_signal(latest):
         intent, action = "reject", "close_lost"
         reply = "Understood, thank you for your time. If your plans change, the catalogue stays open and I am here."
+    elif ci.purchase_signal(latest) and not now_matches and 1 < len(compared) <= 3:
+        intent, action = "purchase", "continue_conversation"
+        names = " or ".join(p.name for p in compared)
+        reply = f"Great! Which one would you like to join: {names}? Tell me and I will open the enrollment."
+        meta = {"products": [card(p) for p in compared]}
     elif ci.purchase_signal(latest) and (focus or all_matches) and str((focus or all_matches[0][0]).id) in enrolled:
         p = focus or all_matches[0][0]
         intent, action = "purchase", "continue_conversation"
@@ -242,7 +275,10 @@ def playbook(
             f"{focus.currency}. You will learn to {f['outcomes'].lower()}. Would you like to enroll or see "
             "the syllabus?"
         )
-        meta = pitch(focus) if now_matches else {}
+        if len(now_matches) > 1:  # comparing programs: show each, no single push
+            meta = {"products": [card(p) for p, _ in now_matches[:3]]}
+        else:
+            meta = pitch(focus) if now_matches else {}
     elif len(customer_texts) <= 1 and re.search(r"(hi|hello|bonjour|salut|hey)", low):
         intent, action = "greeting", "continue_conversation"
         reply = (
@@ -306,7 +342,8 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
             "POLICIES. If the DRAFT recommends a program, recommend that same program and no other. Do not repeat facts "
             "you already gave earlier in the conversation unless asked. If the DRAFT mentions the Enroll button, tell "
             "the customer to use the Enroll button below instead of asking a question. Otherwise end with one short "
-            "next-step question. Never copy the DRAFT sentence by sentence. "
+            "next-step question. Never copy the DRAFT sentence by sentence. Reply in the same language as the "
+            "customer's latest message (French or English). "
             f"Plain text, max 60 words.\nDRAFT: {reply}",
             [{"role": "user", "content": llm.wrap_untrusted("conversation", f"{transcript}\ncustomer: {latest}")}],
             provider=cfg.provider,
