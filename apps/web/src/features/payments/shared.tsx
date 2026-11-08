@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 /** Native <select> styled like the shadcn Input. */
 export const selectClass =
-  "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive dark:bg-input/30 [&>option]:bg-popover [&>option]:text-popover-foreground";
+  "h-9 rounded-xl border border-hair bg-input px-3 text-sm outline-none transition-colors focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand/35 aria-invalid:border-danger [&>option]:bg-panel [&>option]:text-text";
 
 /** URL search params as filter state. Any change except `page` resets pagination. */
 export function useUrlParams() {

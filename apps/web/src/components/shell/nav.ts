@@ -28,7 +28,13 @@ export interface NavItem {
   perm?: string;
 }
 
-export const NAV: { group: string | null; items: NavItem[] }[] = [
+export interface NavGroup {
+  group: string;
+  items: NavItem[];
+}
+
+/** Sidebar groups (README "Global shell"): Overview, Commerce, Intelligence, Trust, System. */
+export const NAV: NavGroup[] = [
   {
     group: "Overview",
     items: [
@@ -43,7 +49,7 @@ export const NAV: { group: string | null; items: NavItem[] }[] = [
     items: [
       { href: "/studio", label: "Studio", icon: Sparkles, description: "Conversations with prospects and the insights agents extracted.", perm: "conversations:read" },
       { href: "/customers", label: "Customers", icon: Users, description: "Profiles, journey stage, intent and history.", perm: "customers:read" },
-      { href: "/products", label: "Products", icon: Package, description: "Training offers, pricing and seats.", perm: "products:read" },
+      { href: "/products", label: "Products", icon: Package, description: "Training programs, pricing and seats.", perm: "products:read" },
       { href: "/orders", label: "Orders", icon: ShoppingCart, description: "Orders and enrollments.", perm: "orders:read" },
       { href: "/payments", label: "Payments", icon: CreditCard, description: "Simulated transactions, holds and refunds.", perm: "payments:read" },
     ],
@@ -64,12 +70,26 @@ export const NAV: { group: string | null; items: NavItem[] }[] = [
     ],
   },
   {
-    group: null,
+    group: "System",
     items: [
-      { href: "/settings", label: "Settings", icon: Settings, description: "Users, roles, AI providers and simulation settings." },
+      { href: "/settings", label: "Settings", icon: Settings, description: "Users, roles, business profile, AI providers and simulation." },
       { href: "/demo", label: "Demo control", icon: FlaskConical, description: "Run scripted scenarios and reset demo data.", perm: "workflows:write" },
     ],
   },
 ];
 
-export const NAV_ITEMS = NAV.flatMap((g) => g.items);
+export const NAV_ITEMS: NavItem[] = NAV.flatMap((g) => g.items);
+
+/** Group + item for a pathname (prefix match, so /workflows/abc -> Workflows). Header breadcrumb + title. */
+export function navFor(pathname: string): { group: string; item: NavItem } | undefined {
+  for (const g of NAV) {
+    const item = g.items.find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+    if (item) return { group: g.group, item };
+  }
+  return undefined;
+}
+
+/** Groups filtered to the items a user may see. `allow` is usually `(perm) => can(user, perm)`. */
+export function visibleNav(allow: (perm: string) => boolean): NavGroup[] {
+  return NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || allow(i.perm)) })).filter((g) => g.items.length > 0);
+}

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ThemeProvider } from "next-themes";
+import { TrackifyThemeProvider } from "@/components/theme";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ApiError } from "@/lib/api";
@@ -21,13 +21,13 @@ export function Providers({ children }: { children: ReactNode }) {
       }),
   );
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+    <TrackifyThemeProvider>
       <QueryClientProvider client={client}>
         <TooltipProvider delayDuration={200}>
           {children}
-          <Toaster richColors position="top-right" />
+          <Toaster />
         </TooltipProvider>
       </QueryClientProvider>
-    </ThemeProvider>
+    </TrackifyThemeProvider>
   );
 }

@@ -1,10 +1,12 @@
 import { cn } from "cn"
 
+/** Loading placeholder: --panel3 with the 1.4s shimmer (README "Loading"). */
 function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="skeleton"
-      className={cn("animate-pulse rounded-md bg-muted", className)}
+      aria-hidden
+      className={cn("anim-shimmer rounded-lg", className)}
       {...props}
     />
   )

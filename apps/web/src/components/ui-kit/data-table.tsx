@@ -25,6 +25,7 @@ export interface DataTableProps<T> {
   onRetry?: () => void;
   emptyTitle?: string;
   emptyDescription?: ReactNode;
+  emptyAction?: ReactNode;
   onRowClick?: (row: T) => void;
   /** Server pagination. Omit for unpaginated tables. */
   page?: number;
@@ -32,9 +33,17 @@ export interface DataTableProps<T> {
   total?: number;
   onPageChange?: (page: number) => void;
   skeletonRows?: number;
+  /** Horizontal scroll floor. Defaults to 680px for <=5 columns, 900px otherwise (README). */
+  minWidth?: number | string;
+  /** Render without the card chrome (when the parent is already a card). */
+  bare?: boolean;
   className?: string;
 }
 
+/**
+ * Prototype list table: card radius 22, header 12px 20px eyebrow, rows 13px 20px hover --panel2,
+ * footer "Showing n of m" + pager, shimmer skeleton rows, centred empty state.
+ */
 export function DataTable<T>({
   columns,
   rows,
@@ -44,22 +53,29 @@ export function DataTable<T>({
   onRetry,
   emptyTitle = "Nothing here yet",
   emptyDescription,
+  emptyAction,
   onRowClick,
   page,
   pageSize,
   total,
   onPageChange,
   skeletonRows = 6,
+  minWidth,
+  bare,
   className,
 }: DataTableProps<T>) {
   if (error && !loading) return <ErrorState error={error} onRetry={onRetry} />;
-  if (!loading && rows && rows.length === 0) return <EmptyState title={emptyTitle} description={emptyDescription} />;
+  if (!loading && rows && rows.length === 0) return <EmptyState title={emptyTitle} description={emptyDescription} action={emptyAction} />;
 
-  const pages = page && pageSize && total !== undefined ? Math.max(1, Math.ceil(total / pageSize)) : 0;
+  const paged = page !== undefined && pageSize !== undefined && total !== undefined;
+  const pages = paged ? Math.max(1, Math.ceil(total / pageSize)) : 0;
+  const shown = rows?.length ?? 0;
+  const from = paged && shown ? (page - 1) * pageSize + 1 : 0;
+  const to = paged ? from + shown - 1 : shown;
 
   return (
-    <div className={cn("rounded-xl border bg-card", className)}>
-      <Table>
+    <div className={cn(!bare && "overflow-hidden rounded-[22px] border border-hair bg-panel shadow-card", className)}>
+      <Table minWidth={minWidth ?? (columns.length <= 5 ? 680 : 900)}>
         <TableHeader>
           <TableRow>
             {columns.map((c) => (
@@ -72,15 +88,15 @@ export function DataTable<T>({
         <TableBody aria-busy={loading || undefined}>
           {loading
             ? Array.from({ length: skeletonRows }, (_, i) => (
-                <TableRow key={i}>
+                <TableRow key={i} className="hover:bg-transparent">
                   {columns.map((c) => (
                     <TableCell key={c.key}>
-                      <Skeleton className="h-4 w-full max-w-40" />
+                      <Skeleton className="h-3.5 w-full max-w-40" style={{ maxWidth: `${55 + ((i * 17 + c.key.length * 7) % 40)}%` }} />
                     </TableCell>
                   ))}
                 </TableRow>
               ))
-            : rows?.map((row) => (
+            : rows?.map((row, i) => (
                 <TableRow
                   key={rowKey(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
@@ -95,7 +111,8 @@ export function DataTable<T>({
                       : undefined
                   }
                   tabIndex={onRowClick ? 0 : undefined}
-                  className={cn(onRowClick && "cursor-pointer")}
+                  className={cn("anim-row-in", onRowClick && "cursor-pointer")}
+                  style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}
                 >
                   {columns.map((c) => (
                     <TableCell key={c.key} className={cn(c.align === "right" && "text-right", c.className)}>
@@ -106,31 +123,24 @@ export function DataTable<T>({
               ))}
         </TableBody>
       </Table>
-      {pages > 0 && onPageChange && (
-        <div className="flex items-center justify-between gap-2 border-t px-4 py-2.5 text-sm text-muted-foreground">
-          <span className="num">
-            Page {page} of {pages} · {total} total
+      {paged && (
+        <div className="flex items-center justify-between gap-2 border-t border-hair bg-panel2 px-5 py-2.5 text-xs font-semibold text-t3">
+          <span className="tabular">
+            {loading ? "Loading…" : shown ? `Showing ${from}–${to} of ${total}` : `Showing 0 of ${total}`}
           </span>
-          <div className="flex gap-1">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Previous page"
-              disabled={loading || page! <= 1}
-              onClick={() => onPageChange(page! - 1)}
-            >
-              <ChevronLeft aria-hidden />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              aria-label="Next page"
-              disabled={loading || page! >= pages}
-              onClick={() => onPageChange(page! + 1)}
-            >
-              <ChevronRight aria-hidden />
-            </Button>
-          </div>
+          {onPageChange && (
+            <div className="flex items-center gap-1.5">
+              <span className="num mr-1">
+                {page} / {pages}
+              </span>
+              <Button variant="outline" size="icon-sm" aria-label="Previous page" disabled={loading || page <= 1} onClick={() => onPageChange(page - 1)}>
+                <ChevronLeft aria-hidden />
+              </Button>
+              <Button variant="outline" size="icon-sm" aria-label="Next page" disabled={loading || page >= pages} onClick={() => onPageChange(page + 1)}>
+                <ChevronRight aria-hidden />
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
