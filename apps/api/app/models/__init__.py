@@ -554,6 +554,33 @@ class BusinessRecommendation(UUIDPk, Timestamped, Base):
     source: Mapped[str] = mapped_column(String(20), default="rules")
 
 
+class BusinessProfile(Base):
+    """Single row: the business behind the public site (shown on landing, program detail, checkout, footer)."""
+
+    __tablename__ = "business_profile"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    name: Mapped[str] = mapped_column(String(80), default="Trackify")
+    legal_name: Mapped[str] = mapped_column(String(120), default="")
+    tagline: Mapped[str] = mapped_column(String(200), default="")
+    about: Mapped[str] = mapped_column(Text, default="")
+    founded: Mapped[str] = mapped_column(String(10), default="")
+    city: Mapped[str] = mapped_column(String(80), default="")
+    address: Mapped[str] = mapped_column(String(200), default="")
+    phone: Mapped[str] = mapped_column(String(40), default="")
+    email: Mapped[str] = mapped_column(String(120), default="")
+    support_email: Mapped[str] = mapped_column(String(120), default="")
+    website: Mapped[str] = mapped_column(String(120), default="")
+    registration: Mapped[str] = mapped_column(String(60), default="")
+    tax_id: Mapped[str] = mapped_column(String(60), default="")
+    refund_policy: Mapped[str] = mapped_column(Text, default="")
+    learners: Mapped[str] = mapped_column(String(20), default="")
+    instructors: Mapped[str] = mapped_column(String(20), default="")
+    rating: Mapped[str] = mapped_column(String(10), default="")
+    accreditations: Mapped[list] = mapped_column(JSON, default=list)
+    support_hours: Mapped[str] = mapped_column(String(120), default="")
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow, onupdate=utcnow)
+
+
 class AnalyticsSnapshot(UUIDPk, Timestamped, Base):
     __tablename__ = "analytics_snapshots"
     metrics: Mapped[dict] = mapped_column(JSON)

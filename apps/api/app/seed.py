@@ -354,6 +354,9 @@ def seed_reference(db: Session) -> None:
         db.add(Agent(id=s.id, name=s.name, description=s.description))
     for p in PRODUCTS:
         db.add(Product(**{**p, "price": Decimal(p["price"])}))
+    from app.services import business
+
+    business.get(db)
     db.commit()
 
 

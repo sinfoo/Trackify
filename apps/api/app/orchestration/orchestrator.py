@@ -7,6 +7,7 @@
 
 import time
 import uuid
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -653,6 +654,21 @@ def on_approval_decided(db: Session, ar: ApprovalRequest, user: User) -> None:
             payments.cancel(db, tx, actor, "rejected at human review")
             if wf:
                 move(db, wf, W.CANCELLED, None, f"rejected by {user.email}")
+    elif ar.action == "CHANGE_PRICE" and ar.status == ApprovalStatus.APPROVED:
+        product = db.get(Product, uuid.UUID(ar.payload["product_id"]))
+        if product:
+            old = str(product.price)
+            product.price = Decimal(ar.payload["new_price"])
+            audit.record(
+                db,
+                actor_type="user",
+                actor_id=user.email,
+                action="product.price_changed",
+                resource_type="product",
+                resource_id=product.id,
+                severity="WARN",
+                details={"old": old, "new": ar.payload["new_price"], "approval_id": str(ar.id)},
+            )
     elif ar.action == "REFUND" and tx:
         refund = db.scalar(select(Refund).where(Refund.approval_id == ar.id))
         if ar.status == ApprovalStatus.APPROVED and refund:

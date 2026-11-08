@@ -202,3 +202,15 @@ payments:{...}, voice:{stt:"browser",tts:"browser"}, environment}` (never keys).
   `/analytics/snapshots/latest` may be `null`. Percentages (`conversion_rate`, `share`) are 0–100.
 - `POST /agents/security/execute {task_type:"explain"}` needs `security:write`; other manual runs need `agents:write`.
 - `POST /workflows/{id}/execute` is not implemented: workflows advance through customer and approval events.
+
+## Trackify additions (redesign)
+
+- `GET /public/business` (no auth) and `GET|PUT /settings/business-profile` [settings:read / settings:write]:
+  `{name, legal_name, tagline, about, founded, city, address, phone, email, support_email, website, registration,
+  tax_id, refund_policy, learners, instructors, rating, accreditations[], support_hours, updated_at}`.
+- `POST /auth/register` accepts `{email, full_name, password (>=8), role: owner|finance|security|sales|viewer,
+  business_name, field_of_activity, team_size, country, phone}`; signs the user in (cookies) and returns
+  `User + business_name`. `owner` -> SUPER_ADMIN while `SELF_SIGNUP_ADMIN=true` (demo), else VIEWER.
+- `PATCH /products/{id}` with a new `price` on an ACTIVE product does not change the price: it creates an approval
+  (`action: CHANGE_PRICE`) and returns the product plus `pending_approval: {id, action, new_price}`. Approving it
+  applies the price. Draft/archived products change immediately.

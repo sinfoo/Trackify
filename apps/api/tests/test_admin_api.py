@@ -105,7 +105,13 @@ def test_price_change_invalidates_open_order(client, db):
     db.close()
     as_(client, "admin@demo.techx")
     r = client.patch(f"{V}/products/{pid}", json={"price": "1990"})
-    assert r.status_code == 200 and r.json()["price"] == "1990.000"
+    # Live price: not applied until another human approves (four-eyes), then it is.
+    assert r.status_code == 200 and r.json()["price"] == "1890.000"
+    approval_id = r.json()["pending_approval"]["id"]
+    as_(client, "security@demo.techx")
+    assert client.post(f"{V}/approvals/{approval_id}/approve", json={"notes": "ok"}).status_code == 200
+    assert client.get(f"{V}/products/{pid}").json()["price"] == "1990.000"
+    as_(client, "admin@demo.techx")
     r = client.post(
         f"{V}/payments/sessions", json={"order_id": str(order_id)}, headers={"Idempotency-Key": "after-price-change"}
     )
@@ -332,3 +338,38 @@ def test_settings_never_expose_keys(client):
     flat = repr(s)
     assert "anthropic_api_key" not in flat and "openai_api_key" not in flat and "jwt_secret" not in flat
     assert "dev-only-change-me" not in flat
+
+
+@needs_route("PATCH", "/products/{id}")
+def test_price_change_on_draft_product_applies_immediately(client, db):
+    as_(client, "admin@demo.techx")
+    r = client.post(
+        f"{V}/products",
+        json={
+            "slug": f"d-{uuid.uuid4().hex[:6]}",
+            "name": "Draft",
+            "category": "X",
+            "summary": "s",
+            "price": "100",
+            "duration_weeks": 1,
+            "level": "Beginner",
+            "seats_total": 5,
+            "status": "DRAFT",
+        },
+    )
+    pid = r.json()["id"]
+    r = client.patch(f"{V}/products/{pid}", json={"price": "120"})
+    assert r.status_code == 200 and r.json()["price"] == "120.000" and "pending_approval" not in r.json()
+
+
+def test_business_profile_public_and_admin(client):
+    pub = client.get(f"{V}/public/business")
+    assert pub.status_code == 200 and pub.json()["name"] == "Trackify" and "registration" in pub.json()
+    as_(client, "viewer@demo.techx")
+    assert client.put(f"{V}/settings/business-profile", json={"name": "Hack"}).status_code == 403
+    as_(client, "admin@demo.techx")
+    body = pub.json() | {"name": "Trackify", "tagline": "New tagline"}
+    body.pop("updated_at")
+    r = client.put(f"{V}/settings/business-profile", json=body)
+    assert r.status_code == 200 and r.json()["tagline"] == "New tagline"
+    assert client.get(f"{V}/public/business").json()["tagline"] == "New tagline"

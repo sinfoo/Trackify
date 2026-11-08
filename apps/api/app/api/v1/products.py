@@ -11,7 +11,7 @@ from app.core.deps import require
 from app.core.errors import AppError, conflict, not_found
 from app.db.base import get_db
 from app.models import Product, ProductStatus, User
-from app.services import audit
+from app.services import approvals, audit
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -132,13 +132,28 @@ def update_product(
     if "slug" in changes:
         _check_slug(db, changes["slug"], p.id)
     diff: dict = {}
+    pending_price = None
     for k, v in changes.items():
         if k == "price":
             v = Decimal(v)
+            if p.status == ProductStatus.ACTIVE and v != p.price:
+                pending_price = v  # live price: needs a second pair of eyes
+                continue
         old = getattr(p, k)
         if old != v:
             diff[k] = {"old": str(old), "new": str(v)} if k in ("price", "status", "slug", "seats_total") else "changed"
             setattr(p, k, v)
+    approval = None
+    if pending_price is not None:
+        approval = approvals.request(
+            db,
+            action="CHANGE_PRICE",
+            reason=f"Change price of {p.name} from {p.price} to {pending_price} TND (active program)",
+            requested_by_user=user,
+            risk_score=0.2,
+            payload={"product_id": str(p.id), "old_price": str(p.price), "new_price": str(pending_price)},
+        )
+        diff["price"] = {"old": str(p.price), "requested": str(pending_price), "approval_id": str(approval.id)}
     if diff:
         audit.record(
             db,
@@ -151,7 +166,10 @@ def update_product(
             details=diff,
         )
     db.commit()
-    return product_out(p, db)
+    out = product_out(p, db)
+    if approval:
+        out["pending_approval"] = {"id": str(approval.id), "action": "CHANGE_PRICE", "new_price": str(pending_price)}
+    return out
 
 
 @router.delete("/{pid}")

@@ -86,3 +86,30 @@ def test_register_creates_viewer(client):
         ).status_code
         == 409
     )
+
+
+def test_register_business_owner_is_signed_in_with_profile(client):
+    r = client.post(
+        f"{A}/register",
+        json={
+            "email": "owner@newbiz.com",
+            "full_name": "Owner One",
+            "password": "longenough1",
+            "role": "owner",
+            "business_name": "NewBiz Academy",
+            "field_of_activity": "Education & training",
+            "team_size": "2-10",
+            "country": "Tunisia",
+            "phone": "+216 20 000 000",
+        },
+    )
+    assert r.status_code == 201 and r.json()["roles"] == ["SUPER_ADMIN"]
+    assert r.json()["business_name"] == "NewBiz Academy"
+    assert "access_token" in r.cookies  # signed in right away
+    assert client.get(f"{A}/me").json()["email"] == "owner@newbiz.com"
+
+
+def test_register_rejects_short_password_and_unknown_role(client):
+    base = {"email": "x@newbiz.com", "full_name": "X Y"}
+    assert client.post(f"{A}/register", json=base | {"password": "short1"}).status_code == 422
+    assert client.post(f"{A}/register", json=base | {"password": "longenough1", "role": "god"}).status_code == 422

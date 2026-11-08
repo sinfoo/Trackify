@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
     # Demo
     demo_password: str = "Demo!2026"
+    self_signup_admin: bool = True  # "Business owner" sign-up gets SUPER_ADMIN (demo); disable in production
 
     @property
     def is_sqlite(self) -> bool:

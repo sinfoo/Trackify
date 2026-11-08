@@ -60,6 +60,16 @@ def _conv(db: Session, conv_id: uuid.UUID, token: str | None) -> Conversation:
     return conv
 
 
+@router.get("/business")
+def business_profile(db: Session = Depends(get_db)):
+    """Who the customer is buying from (public, no secrets)."""
+    from app.services import business
+
+    row = business.get(db)
+    db.commit()
+    return business.out(row)
+
+
 @router.get("/offers")
 def offers(db: Session = Depends(get_db)):
     rows = db.scalars(select(Product).where(Product.status == ProductStatus.ACTIVE).order_by(Product.price))

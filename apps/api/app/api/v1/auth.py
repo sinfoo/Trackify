@@ -3,6 +3,7 @@ import time
 import uuid
 from collections import defaultdict, deque
 from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Request, Response
 from pydantic import BaseModel, EmailStr, Field
@@ -156,28 +157,63 @@ def me(user: User = Depends(current_user)):
     return user_out(user)
 
 
+SIGNUP_ROLES = {
+    "owner": "SUPER_ADMIN",
+    "finance": "FINANCE_MANAGER",
+    "security": "SECURITY_ANALYST",
+    "sales": "SALES_MANAGER",
+    "viewer": "VIEWER",
+}
+
+
 class RegisterIn(BaseModel):
     email: EmailStr
     full_name: str = Field(min_length=2, max_length=120)
-    password: str = Field(min_length=10, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+    # Business onboarding (demo self-service). Stored on the user profile; the role is applied below.
+    role: Literal["owner", "finance", "security", "sales", "viewer"] = "viewer"
+    business_name: str = Field("", max_length=120)
+    field_of_activity: str = Field("", max_length=80)
+    team_size: str = Field("", max_length=20)
+    country: str = Field("", max_length=80)
+    phone: str = Field("", max_length=40)
 
 
 @router.post("/register", status_code=201)
-def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
+def register(body: RegisterIn, request: Request, response: Response, db: Session = Depends(get_db)):
     if db.scalar(select(User).where(User.email == body.email.lower())):
         raise AppError(409, "EMAIL_TAKEN", "An account with this email already exists")
-    viewer = db.scalar(select(Role).where(Role.name == "VIEWER"))
+    # ponytail: self-service admin sign-up is a demo convenience; production should set SELF_SIGNUP_ADMIN=false.
+    wanted = SIGNUP_ROLES[body.role]
+    if wanted == "SUPER_ADMIN" and not get_settings().self_signup_admin:
+        wanted = "VIEWER"
+    role = db.scalar(select(Role).where(Role.name == wanted))
     u = User(
         email=body.email.lower(),
         full_name=body.full_name,
         password_hash=hash_password(body.password),
-        roles=[viewer] if viewer else [],
+        roles=[role] if role else [],
+        preferences={
+            "business_name": body.business_name,
+            "field_of_activity": body.field_of_activity,
+            "team_size": body.team_size,
+            "country": body.country,
+            "phone": body.phone,
+        },
     )
     db.add(u)
     db.flush()
-    audit.record(db, actor_type="user", actor_id=u.email, action="auth.register", ip=client_ip(request))
+    audit.record(
+        db,
+        actor_type="user",
+        actor_id=u.email,
+        action="auth.register",
+        ip=client_ip(request),
+        details={"role": wanted, "business_name": body.business_name},
+    )
+    _set_cookies(response, db, u)  # signed in right away, like the prototype
     db.commit()
-    return user_out(u)
+    return user_out(u) | {"business_name": body.business_name}
 
 
 class ForgotIn(BaseModel):
