@@ -23,6 +23,7 @@ flowchart LR
 | Password storage | Argon2id | `core/security.py` |
 | Privilege escalation | RBAC enforced in `require(perm)` on every admin route; denials audited | `core/deps.py` |
 | Prompt injection | Pattern classifier (EN/FR) runs before any LLM; flagged messages never reach the model; safe refusal; untrusted delimiters; LLM output never decides state | `services/risk.py`, `orchestrator.handle_customer_message` |
+| Model output | Sales replies are validated before use: any price not in the catalog, discount/coupon promise or payment/refund approval claim discards the model text and keeps the rules draft | `agents/sales.py::safe_reply` |
 | Agent misuse | Per-agent tool allowlist; forbidden tool -> `AGENT_PERMISSION_VIOLATION` event; no agent can approve, refund or change prices | `agents/base.py` |
 | Payment fraud | Velocity, repeated failures, duplicates, high value (HOLD), amount tampering (BLOCK), z-score anomaly | `services/risk.py` |
 | Price manipulation | Amount recomputed from catalog at session creation and re-checked at payment | `services/payments.py` |

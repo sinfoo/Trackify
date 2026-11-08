@@ -55,11 +55,11 @@ shown in the workflow visualiser.
 
 | Agent | LLM role | Fallback |
 |---|---|---|
-| Sales | Rewrites the rules-drafted reply; must keep facts and CTA | Rules reply |
+| Sales | Answers the customer's actual question from catalog + policies, keeps the rules CTA; output validated (no invented prices, discounts or approvals) | Rules reply |
 | Intelligence | Refines summary, needs, motivations (JSON validated by Pydantic) | Lexicon analysis |
 | Analyst | Short note using only the given metrics | Deterministic narrative |
-| Strategy | Sharpens hypothesis wording | Rules hypothesis |
+| Strategy | Sharpens hypotheses in one batched call, only for recommendations whose evidence changed | Rules hypothesis |
 | Security | Explains an alert; cannot change the decision | Template explanation |
 
 Customer text is always sent inside `<untrusted>` delimiters and never merged into system instructions.
-Configure per agent in Settings (`provider`, `model`, `temperature`) or globally with `AI_PROVIDER` and keys.
+Providers: `mock` (default), `gemini` (Google AI Studio), `anthropic`, `openai`. Configure per agent in Settings (`provider`, `model`, `temperature`) or globally with `AI_PROVIDER` and keys.

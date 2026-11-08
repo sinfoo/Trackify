@@ -4,7 +4,9 @@ Structured facts (recommended product, CTA, prices) always come from the catalog
 never from model text.
 """
 
+import re
 import uuid
+from decimal import Decimal, InvalidOperation
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -184,20 +186,27 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
     cfg = ctx.config
     try:
         catalog = "\n".join(
-            f"- {p.name}: {p.price} {p.currency}, {p.duration_weeks} weeks, {p.level}. {p.summary}" for p in products
+            f"- {p.name}: {p.price:.0f} {p.currency}, {p.duration_weeks} weeks, level {p.level}. {p.summary} "
+            f"Outcomes: {'; '.join(p.learning_outcomes)}. For: {p.target_audience}"
+            for p in products
         )
         transcript = "\n".join(f"{m.role}: {m.content}" for m in history[-8:] if not m.flagged)
         res = llm.complete(
-            f"{ctx_spec_prompt()}\n\nCATALOG:\n{catalog}\n\nA rules engine drafted this reply; improve wording only, "
-            f"keep every fact and the call to action:\nDRAFT: {reply}",
+            f"{ctx_spec_prompt()}\n\nCATALOG:\n{catalog}\n\nPOLICIES: 3-instalment plan at no extra cost; evening and "
+            "weekend sessions, about 6 hours a week, all recorded; mentors run weekly office hours; verifiable "
+            "certificate; checkout is simulated and refunds need human approval.\n\n"
+            "Answer the customer's latest message directly (questions, doubts, objections), using only CATALOG and "
+            "POLICIES. Then end with the next step from the DRAFT (keep its product and call to action). "
+            f"Plain text, max 90 words.\nDRAFT: {reply}",
             [{"role": "user", "content": llm.wrap_untrusted("conversation", f"{transcript}\ncustomer: {latest}")}],
             provider=cfg.provider,
             model=cfg.model,
             temperature=cfg.temperature,
             max_tokens=400,
         )
-        if res.text.strip():
-            reply = res.text.strip()[:1200]
+        text = res.text.strip()[:1200]
+        if text and safe_reply(text, products):
+            reply = text
             ctx.provider, ctx.tokens_in, ctx.tokens_out = res.provider, res.tokens_in, res.tokens_out
     except llm.LLMUnavailable:
         pass
@@ -217,3 +226,24 @@ def ctx_spec_prompt() -> str:
     from app.agents.base import SPECS
 
     return SPECS["sales"].system_prompt
+
+
+_AMOUNT = re.compile(r"(\d[\d,\s]*(?:\.\d+)?)\s*(?:TND|DT|dinars?)", re.I)
+_FORBIDDEN = re.compile(
+    r"\b(discount|coupon|promo code|for free|free of charge|\d+\s*% off|refund (is|has been) (approved|issued)|"
+    r"payment (is|has been) (approved|confirmed))\b",
+    re.I,
+)
+
+
+def safe_reply(text: str, products: list[Product]) -> bool:
+    """Output validation: model text may not invent prices or promise discounts/approvals."""
+    prices = {p.price.quantize(Decimal("1")) for p in products}
+    for raw in _AMOUNT.findall(text):
+        try:
+            amount = Decimal(raw.replace(",", "").replace(" ", "")).quantize(Decimal("1"))
+        except InvalidOperation:
+            return False
+        if amount not in prices:
+            return False
+    return not _FORBIDDEN.search(text)

@@ -180,3 +180,35 @@ def test_provider_crash_degrades_to_rules(client, monkeypatch):
     conv_id, h = _start(client)
     msgs = _say(client, conv_id, h, "Tell me about cybersecurity")
     assert msgs[-1]["role"] == "agent" and "Cybersecurity" in msgs[-1]["content"]
+
+
+def test_llm_reply_with_invented_price_is_rejected(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.llm import providers
+
+    def fake(system, messages, model, max_tokens, temperature):
+        return providers.LLMResult("Special deal: only 990 TND today with a 20% off coupon!", "gemini", model)
+
+    monkeypatch.setattr(get_settings(), "ai_provider", "gemini")
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+    monkeypatch.setattr(providers, "_gemini", fake)
+    conv_id, h = _start(client)
+    reply = _say(client, conv_id, h, "Tell me about generative AI")[-1]["content"]
+    assert "990 TND" not in reply and "coupon" not in reply  # fell back to the rules draft
+    assert "Generative AI" in reply
+
+
+def test_llm_reply_grounded_in_catalog_is_used(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.llm import providers
+
+    def fake(system, messages, model, max_tokens, temperature):
+        return providers.LLMResult(
+            "Not too hard: it starts from the basics. It is 1,890 TND for 8 weeks.", "gemini", model
+        )
+
+    monkeypatch.setattr(get_settings(), "ai_provider", "gemini")
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-key")
+    monkeypatch.setattr(providers, "_gemini", fake)
+    conv_id, h = _start(client)
+    assert _say(client, conv_id, h, "Is generative AI hard?")[-1]["content"].startswith("Not too hard")

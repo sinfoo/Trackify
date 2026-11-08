@@ -63,7 +63,7 @@ def agent_permissions(agent_id: str, db: Session = Depends(get_db), _: User = De
 
 class AgentConfigIn(BaseModel):
     enabled: bool | None = None
-    provider: str | None = Field(None, pattern="^(mock|anthropic|openai)$")
+    provider: str | None = Field(None, pattern="^(mock|anthropic|openai|gemini)$")
     model: str | None = Field(None, max_length=80)
     temperature: float | None = Field(None, ge=0, le=1)
 

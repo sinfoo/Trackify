@@ -393,32 +393,39 @@ def _strategy_rules(db) -> list[Rec]:
     return recs
 
 
+class _Hypotheses(BaseModel):
+    hypotheses: list[str] = Field(max_length=20)
+
+
 def strategy_run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
     db = ctx.db
     recs = ctx.use("analytics.read", _strategy_rules, db)
     cfg = ctx.config
-    for r in recs:
+    active = {
+        o.rule_key: o
+        for o in db.scalars(select(BusinessRecommendation).where(BusinessRecommendation.status == "ACTIVE"))
+    }
+    fresh = [r for r in recs if not ((o := active.get(r.rule_key)) and o.metrics == r.metrics and o.title == r.title)]
+    if fresh:  # one batched LLM call, only for recommendations whose evidence changed
         try:
-            res = llm.complete(
-                "Rewrite this hypothesis in one sharper sentence. Do not add numbers that are not given.",
-                [{"role": "user", "content": f"FACTS: {r.observed_facts}\nHYPOTHESIS: {r.hypothesis}"}],
+            items = "\n".join(f"{i}. FACTS: {r.observed_facts} HYPOTHESIS: {r.hypothesis}" for i, r in enumerate(fresh))
+            out, res = llm.complete_json(
+                "You are a business strategist. Rewrite each hypothesis as one sharper sentence. Keep the same order "
+                "and count. Never add numbers that are not in the facts. It stays a hypothesis, not a fact.",
+                items,
+                _Hypotheses,
                 provider=cfg.provider,
                 model=cfg.model,
-                max_tokens=150,
+                max_tokens=900,
             )
-            if res.text.strip():
-                r.hypothesis = res.text.strip()[:500]
-                ctx.provider = res.provider
-                ctx.tokens_in += res.tokens_in
-                ctx.tokens_out += res.tokens_out
+            if len(out.hypotheses) == len(fresh):
+                for r, h in zip(fresh, out.hypotheses, strict=True):
+                    r.hypothesis = h.strip()[:500] or r.hypothesis
+                ctx.provider, ctx.tokens_in, ctx.tokens_out = res.provider, res.tokens_in, res.tokens_out
         except llm.LLMUnavailable:
-            break
+            pass
 
     def _write():
-        active = {
-            o.rule_key: o
-            for o in db.scalars(select(BusinessRecommendation).where(BusinessRecommendation.status == "ACTIVE"))
-        }
         rows = []
         for r in recs:
             old = active.get(r.rule_key)

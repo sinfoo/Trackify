@@ -21,9 +21,10 @@ class Settings(BaseSettings):
     login_window_seconds: int = 300
 
     # AI providers. Keys stay server-side and are never returned by the API.
-    ai_provider: Literal["mock", "anthropic", "openai"] = "mock"
+    ai_provider: Literal["mock", "anthropic", "openai", "gemini"] = "mock"
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    gemini_api_key: str = ""  # Google AI Studio
     default_model: str = ""
     llm_timeout_seconds: float = 20.0
     llm_max_retries: int = 1

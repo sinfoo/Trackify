@@ -20,7 +20,7 @@ from app.core.config import get_settings
 
 log = logging.getLogger(__name__)
 
-DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "gpt-5"}
+DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "gpt-5", "gemini": "gemini-3.5-flash-lite"}
 
 
 @dataclass
@@ -41,6 +41,8 @@ def resolve(provider_override: str | None = None, model_override: str | None = N
     s = get_settings()
     provider = provider_override or s.ai_provider
     if provider == "anthropic" and not s.anthropic_api_key:
+        provider = "mock"
+    if provider == "gemini" and not s.gemini_api_key:
         provider = "mock"
     if provider == "openai" and not s.openai_api_key:
         provider = "mock"
@@ -75,6 +77,40 @@ def _anthropic(system: str, messages: list[dict], model: str, max_tokens: int) -
         raise LLMUnavailable("refusal")
     text = "".join(b.text for b in resp.content if b.type == "text")
     return LLMResult(text, "anthropic", resp.model, resp.usage.input_tokens, resp.usage.output_tokens)
+
+
+def _gemini(system: str, messages: list[dict], model: str, max_tokens: int, temperature: float) -> LLMResult:
+    from google import genai
+    from google.genai import errors, types
+
+    s = get_settings()
+    client = genai.Client(
+        api_key=s.gemini_api_key,
+        http_options=types.HttpOptions(
+            timeout=int(s.llm_timeout_seconds * 1000),
+            retry_options=types.HttpRetryOptions(attempts=s.llm_max_retries + 1),
+        ),
+    )
+    contents = [
+        {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]} for m in messages
+    ]
+    try:
+        resp = client.models.generate_content(
+            model=model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system, max_output_tokens=max_tokens, temperature=temperature
+            ),
+        )
+    except errors.APIError as e:
+        raise LLMUnavailable(f"status {e.code}") from e
+    text = resp.text or ""
+    if not text.strip():
+        raise LLMUnavailable("empty or blocked response")
+    u = resp.usage_metadata
+    return LLMResult(
+        text, "gemini", model, (u.prompt_token_count or 0) if u else 0, (u.candidates_token_count or 0) if u else 0
+    )
 
 
 def _openai(system: str, messages: list[dict], model: str, max_tokens: int, temperature: float) -> LLMResult:
@@ -116,6 +152,8 @@ def complete(
     try:
         if provider == "anthropic":
             return _anthropic(system, messages, model, max_tokens)
+        if provider == "gemini":
+            return _gemini(system, messages, model, max_tokens, temperature)
         return _openai(system, messages, model, max_tokens, temperature)
     except LLMUnavailable:
         raise

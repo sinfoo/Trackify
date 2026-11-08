@@ -18,6 +18,7 @@ def get_system_settings(_: User = Depends(require("settings:read"))):
             "default_model": s.default_model,
             "anthropic_configured": bool(s.anthropic_api_key),
             "openai_configured": bool(s.openai_api_key),
+            "gemini_configured": bool(s.gemini_api_key),
         },
         "payments": payments.settings_view(),
         "voice": {"stt": "browser", "tts": "browser"},

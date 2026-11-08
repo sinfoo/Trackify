@@ -36,7 +36,7 @@ Contract: [ARCHITECTURE.md](ARCHITECTURE.md) · Details: [docs/ARCHITECTURE.md](
 
 ## 3. Technology
 
-Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic, Argon2, PyJWT, Anthropic + OpenAI SDKs, pytest.
+Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, Pydantic, Argon2, PyJWT, Gemini, Anthropic and OpenAI SDKs, pytest.
 Frontend: Next.js 16 (App Router), React 19, TypeScript strict, Tailwind 4, shadcn/ui, TanStack Query, Recharts,
 React Flow, React Hook Form + Zod, Vitest, Playwright. Infra: Docker Compose (PostgreSQL), GitHub Actions.
 
@@ -67,7 +67,9 @@ npm run dev                          # http://localhost:3000
 Shortcuts: `make install|seed|reset|dev|test` (macOS/Linux) or `./scripts/dev.ps1 install|seed|reset|dev|test` (Windows).
 
 Environment variables are documented in [.env.example](.env.example). To use a real model set
-`AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` (or `openai` + `OPENAI_API_KEY`). Keys stay on the server.
+`AI_PROVIDER=gemini` + `GEMINI_API_KEY` (Google AI Studio, default model `gemini-3.5-flash-lite`),
+`anthropic` + `ANTHROPIC_API_KEY`, or `openai` + `OPENAI_API_KEY`. Keys stay on the server, in the gitignored `.env`.
+If the provider fails or times out, every agent falls back to its rules engine automatically.
 
 ### Demo accounts (password `Demo!2026`)
 
