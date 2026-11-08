@@ -635,7 +635,14 @@ def upgrade() -> None:
         # Append-only audit trail: block UPDATE/DELETE at the database level.
         op.execute("""
             CREATE OR REPLACE FUNCTION audit_logs_append_only() RETURNS trigger AS $$
-            BEGIN RAISE EXCEPTION 'audit_logs is append-only'; END; $$ LANGUAGE plpgsql;
+            BEGIN
+              -- Only allowed change: sealing a fresh row once (hash/prev_hash set, nothing else touched).
+              IF TG_OP = 'UPDATE' AND OLD.hash = '' AND NEW.hash <> ''
+                 AND (to_jsonb(NEW) - 'hash' - 'prev_hash') = (to_jsonb(OLD) - 'hash' - 'prev_hash') THEN
+                RETURN NEW;
+              END IF;
+              RAISE EXCEPTION 'audit_logs is append-only';
+            END; $$ LANGUAGE plpgsql;
         """)
         op.execute("""
             CREATE TRIGGER audit_logs_no_mutation BEFORE UPDATE OR DELETE ON audit_logs

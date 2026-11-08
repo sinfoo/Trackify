@@ -111,7 +111,6 @@ NEGATIVE = [
     "annoying",
     "scam",
     "difficult",
-    "problem",
     "no thanks",
     "unfortunately",
     "frustrated",
@@ -123,6 +122,8 @@ NEGATIVE = [
 PURCHASE = [
     "enroll",
     "enrol",
+    "enrolling",
+    "sign up for",
     "sign me up",
     "sign up",
     "register",
@@ -189,7 +190,8 @@ MOTIVATIONS = {
 
 
 def _hits(text: str, terms: list[str]) -> int:
-    return sum(1 for t in terms if t in text)
+    """Whole-word matching: "bad" never matches "badge", "hi" never matches "this"."""
+    return sum(1 for t in terms if re.search(r"(?<!\w)" + re.escape(t) + r"(?!\w)", text))
 
 
 def _norm(text: str) -> str:

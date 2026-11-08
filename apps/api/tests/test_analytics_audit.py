@@ -137,3 +137,17 @@ def test_forecast_and_feedback_analytics(db):
     assert {"theme": "time_constraints", "count": 1} in fb["themes"]
     rec = next(r for r in _strategy_rules(db) if r.rule_key == "feedback_experience")
     assert any("3.33" in fact for fact in rec.observed_facts)
+
+
+def test_audit_rows_are_sealed_after_commit_in_id_order(db):
+    from app.models import AuditLog as A
+
+    first = audit.record(db, actor_type="system", actor_id="t", action="a")
+    assert first.hash == ""  # not chained inside the open transaction
+    audit.record(db, actor_type="system", actor_id="t", action="b")
+    db.commit()
+    db.expire_all()
+    rows = db.scalars(select(A).order_by(A.id)).all()
+    assert all(r.hash for r in rows)
+    assert all(rows[i].prev_hash == rows[i - 1].hash for i in range(1, len(rows)))
+    assert audit.verify_chain(db) == (True, None)

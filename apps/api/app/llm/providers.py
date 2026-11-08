@@ -12,6 +12,7 @@ into the system prompt (prompt-injection boundary).
 import json
 import logging
 import re
+import time
 from dataclasses import dataclass, field
 
 from pydantic import BaseModel, ValidationError
@@ -70,6 +71,7 @@ def _anthropic(system: str, messages: list[dict], model: str, max_tokens: int) -
     except anthropic.APIConnectionError as e:
         raise LLMUnavailable(f"connection: {e}") from e
     except anthropic.RateLimitError as e:
+        _cool_down()
         raise LLMUnavailable("rate limited") from e
     except anthropic.APIStatusError as e:
         raise LLMUnavailable(f"status {e.status_code}") from e
@@ -88,7 +90,10 @@ def _gemini(system: str, messages: list[dict], model: str, max_tokens: int, temp
         api_key=s.gemini_api_key,
         http_options=types.HttpOptions(
             timeout=int(s.llm_timeout_seconds * 1000),
-            retry_options=types.HttpRetryOptions(attempts=s.llm_max_retries + 1),
+            # Retry server errors only; a 429 goes straight to the rules fallback (see _cool_down).
+            retry_options=types.HttpRetryOptions(
+                attempts=s.llm_max_retries + 1, http_status_codes=[500, 502, 503, 504]
+            ),
         ),
     )
     contents = [
@@ -103,6 +108,8 @@ def _gemini(system: str, messages: list[dict], model: str, max_tokens: int, temp
             ),
         )
     except errors.APIError as e:
+        if e.code == 429:
+            _cool_down()
         raise LLMUnavailable(f"status {e.code}") from e
     text = resp.text or ""
     if not text.strip():
@@ -136,6 +143,20 @@ def _openai(system: str, messages: list[dict], model: str, max_tokens: int, temp
     )
 
 
+_cooldown_until = 0.0
+COOLDOWN_SECONDS = 60
+
+
+def _cool_down() -> None:
+    """Circuit breaker: after a 429, skip the provider for a minute so the demo never waits on retries.
+
+    ponytail: per-process; a shared limiter (Redis) is needed with several API workers.
+    """
+    global _cooldown_until
+    _cooldown_until = time.monotonic() + COOLDOWN_SECONDS
+    log.warning("LLM provider rate limited; using rules for %ss", COOLDOWN_SECONDS)
+
+
 def complete(
     system: str,
     messages: list[dict],
@@ -149,6 +170,8 @@ def complete(
     provider, model = resolve(provider, model)
     if provider == "mock":
         raise LLMUnavailable("mock provider")
+    if time.monotonic() < _cooldown_until:  # provider rate limited recently: answer with rules, instantly
+        raise LLMUnavailable("provider cooling down after rate limit")
     try:
         if provider == "anthropic":
             return _anthropic(system, messages, model, max_tokens)
