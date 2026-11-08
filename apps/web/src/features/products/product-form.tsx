@@ -85,7 +85,8 @@ export const toValues = (p?: Product): ProductValues => ({
   target_audience: p?.target_audience ?? "",
   keywords: p?.keywords.join(", ") ?? "",
   seats_total: p ? String(p.seats_total) : "20",
-  status: (p?.status as ProductValues["status"]) ?? "DRAFT",
+  // New programs publish by default: an owner adds a course to sell it. Draft stays one click away.
+  status: (p?.status as ProductValues["status"]) ?? "ACTIVE",
 });
 
 export const toBody = (v: ProductValues) => ({

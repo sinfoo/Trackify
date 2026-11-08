@@ -116,8 +116,8 @@ const withSide = (href: string, p: URLSearchParams) => {
  * Where to go once signed in: finish an interrupted enroll (links the guest chat first), else `?next=`, else the
  * side the account has: buyers-only to /account, sellers to /dashboard.
  */
-export async function destinationAfterSignIn(next: string | null): Promise<string> {
-  const resumed = await resumeBuyerIntent().catch(() => null);
+export async function destinationAfterSignIn(next: string | null, fromGate = false): Promise<string> {
+  const resumed = await resumeBuyerIntent(fromGate).catch(() => null);
   if (resumed) return resumed;
   if (next) return safeNext(next);
   const flags = await api.get<BuyerFlags>("/me/flags", { noAuthRedirect: true }).catch(() => null);
@@ -417,7 +417,7 @@ export function LoginForm() {
     try {
       const user = await api.post<User>("/auth/login", values);
       qc.setQueryData(qk.me, user);
-      router.replace(await destinationAfterSignIn(params.get("next")));
+      router.replace(await destinationAfterSignIn(params.get("next"), params.get("as") === "buyer"));
     } catch (e) {
       setFormError(errorMessage(e));
     }
@@ -514,7 +514,7 @@ export function BuyerRegisterForm() {
       const user = await api.post<User>("/auth/register", { full_name, email, password, role: "buyer" });
       qc.setQueryData(qk.me, user);
       toast.success(`Welcome, ${user.full_name.trim().split(/\s+/)[0] || user.full_name}.`);
-      router.replace(await destinationAfterSignIn(params.get("next")));
+      router.replace(await destinationAfterSignIn(params.get("next"), params.get("as") === "buyer"));
     } catch (e) {
       setFormError(errorMessage(e));
     }

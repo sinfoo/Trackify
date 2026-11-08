@@ -71,12 +71,9 @@ def card(p: Product) -> dict:
 
 
 # Profile -> program, used when the customer describes themselves instead of naming a program.
-# Order matters: non-technical profiles first so "marketing, never coded" never lands on an advanced course.
+# Order matters: non-technical cues first, so "marketing manager who never coded" lands on the intro course,
+# not on the executive one just because "manager" appears.
 PROFILE_RULES: list[tuple[str, tuple[str, ...]]] = [
-    (
-        "ai-leadership",
-        ("manager", "executive", "ceo", "founder", "lead a team", "leadership", "my company", "director"),
-    ),
     (
         "intro-ai",
         (
@@ -93,6 +90,10 @@ PROFILE_RULES: list[tuple[str, tuple[str, ...]]] = [
             "teacher",
             "student",
         ),
+    ),
+    (
+        "ai-leadership",
+        ("manager", "executive", "ceo", "founder", "lead a team", "leadership", "my company", "director"),
     ),
     (
         "data-science",
@@ -327,6 +328,7 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
     reply, meta, result = playbook(history, latest, products, conv, enrolled)
 
     cfg = ctx.config
+    fr = is_french(latest)
     try:
         catalog = "\n".join(
             f"- {p.name}: {p.price:.0f} {p.currency}, {p.duration_weeks} weeks, level {p.level}. {p.summary} "
@@ -342,8 +344,7 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
             "POLICIES. If the DRAFT recommends a program, recommend that same program and no other. Do not repeat facts "
             "you already gave earlier in the conversation unless asked. If the DRAFT mentions the Enroll button, tell "
             "the customer to use the Enroll button below instead of asking a question. Otherwise end with one short "
-            "next-step question. Never copy the DRAFT sentence by sentence. Reply in the same language as the "
-            "customer's latest message (French or English). "
+            f"next-step question. Never copy the DRAFT sentence by sentence. Reply in {'French' if fr else 'English'}. "
             f"Plain text, max 60 words.\nDRAFT: {reply}",
             [{"role": "user", "content": llm.wrap_untrusted("conversation", f"{transcript}\ncustomer: {latest}")}],
             provider=cfg.provider,
@@ -352,7 +353,7 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
             max_tokens=400,
         )
         text = plain_text(res.text)[:1200]
-        if text and safe_reply(text, products):
+        if text and safe_reply(text, products, draft=reply, french=fr):
             reply = text
             ctx.provider, ctx.tokens_in, ctx.tokens_out = res.provider, res.tokens_in, res.tokens_out
     except llm.LLMUnavailable:
@@ -383,8 +384,26 @@ _FORBIDDEN = re.compile(
 )
 
 
-def safe_reply(text: str, products: list[Product]) -> bool:
-    """Output validation: model text may not invent prices or promise discounts/approvals."""
+# French function words and verbs (accents already stripped by ci._norm). Two hits = French.
+_FR_WORDS = frozenset(
+    "je vous nous une des est pas que qui pour avec sur dans votre vos mon bonjour merci formation formations "
+    "combien quel quelle quels quelles voudrais veux souhaite apprendre cours semaines niveau proposons".split()
+)
+
+
+def is_french(text: str) -> bool:
+    words = ci._words_all(text)
+    return len(words & _FR_WORDS) >= 2 or bool(words & {"bonjour", "merci", "cybersecurite", "formation"})
+
+
+def programs_named(text: str, products: list[Product]) -> set[str]:
+    t = ci._norm(text)
+    return {p.slug for p in products if ci._norm(p.name) in t}
+
+
+def safe_reply(text: str, products: list[Product], draft: str | None = None, french: bool | None = None) -> bool:
+    """Output validation: model text may not invent prices, promise discounts/approvals, recommend a program the
+    deterministic draft did not pick, or switch language on the customer."""
     prices = {p.price.quantize(Decimal("1")) for p in products}
     for raw in _AMOUNT.findall(text):
         try:
@@ -393,7 +412,17 @@ def safe_reply(text: str, products: list[Product]) -> bool:
             return False
         if amount not in prices:
             return False
-    return not _FORBIDDEN.search(text)
+    if _FORBIDDEN.search(text):
+        return False
+    if (
+        draft is not None
+        and programs_named(draft, products)
+        and programs_named(text, products) - programs_named(draft, products)
+    ):
+        return False  # the card and the sentence must agree
+    if french is not None and is_french(text) != french:
+        return False
+    return True
 
 
 def plain_text(text: str) -> str:

@@ -34,13 +34,16 @@ test("guest chats, is asked for a buyer account on enroll, pays and sees the pro
   await enroll.click();
   // Buying needs a buyer account: the gate sends the guest to the buyer sign-in and resumes the enrollment after.
   await page.waitForURL(/\/login\?as=buyer/);
-  await page.getByLabel("Email").fill("buyer@demo.techx");
+  // A fresh buyer per run: the shared demo buyer must not accumulate test orders.
+  await page.getByRole("link", { name: "Create a buyer account" }).click();
+  await page.waitForURL(/\/register\?as=buyer/);
+  await page.getByLabel("Full name").fill("E2E Buyer");
+  await page.getByLabel("Email").fill(`e2e.buyer+${Date.now()}@example.com`);
   await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await page.waitForURL(/\/(checkout\/|account)/, { timeout: 20_000 });
-  if (/\/account/.test(page.url())) return; // demo buyer already owns this program: ALREADY_ENROLLED lands on the library
-  // The shared demo buyer accumulates purchases, so the velocity rule may hold the payment for a human (an open held
-  // checkout is reused on the next enroll): paying and being held are both valid outcomes.
+  await page.getByLabel("Confirm password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Create buyer account" }).click();
+  await page.waitForURL(/\/checkout\//, { timeout: 20_000 });
+  // A fresh buyer pays straight through; a held payment (velocity rule) is still a valid outcome.
   const held = page.getByRole("heading", { name: /A person will review this payment/ });
   const card = page.getByText("Test card · always succeeds");
   await Promise.race([card.waitFor({ timeout: 20_000 }), held.waitFor({ timeout: 20_000 })]);

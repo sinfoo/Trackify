@@ -81,7 +81,7 @@ def _check_slug(db: Session, slug: str, own_id: uuid.UUID | None = None) -> None
 def list_products(
     status: ProductStatus | None = None, db: Session = Depends(get_db), _: User = Depends(require("products:read"))
 ):
-    q = select(Product).order_by(Product.name)
+    q = select(Product).order_by(Product.created_at.desc())  # newest first: what you just added is on top
     if status:
         q = q.where(Product.status == status)
     return [product_out(p, db) for p in db.scalars(q)]

@@ -142,7 +142,11 @@ export function ProductsView() {
             <Button className={actionBtn} onClick={() => setModal({ open: true })}>
               <Plus aria-hidden /> New program
             </Button>
-          ) : undefined
+          ) : (
+            <span className="rounded-full border border-hair bg-panel2 px-3 py-1.5 text-xs font-semibold text-t3" title="Adding or editing programs needs the Sales manager, Admin or Super admin role">
+              Read-only for your role
+            </span>
+          )
         }
       />
       <Toolbar>

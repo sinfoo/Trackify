@@ -91,7 +91,7 @@ describe("productSchema", () => {
 describe("ProductModal", () => {
   it("marks required fields invalid and shows the summary error instead of submitting", async () => {
     renderForm();
-    await userEvent.click(screen.getByRole("button", { name: "Save program" }));
+    await userEvent.click(screen.getByRole("button", { name: "Publish program" }));
     expect(await screen.findByText("Fill in the highlighted fields.")).toBeInTheDocument();
     expect(screen.getByLabelText("Program name")).toHaveAttribute("aria-invalid", "true");
     expect(screen.getByLabelText(/^Price/)).toHaveAttribute("aria-invalid", "true");

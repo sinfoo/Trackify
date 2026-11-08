@@ -200,12 +200,32 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", "".join(c for c in t if not unicodedata.combining(c)))
 
 
+# Words too generic to identify a program on their own ("introduction to AI" must not match every "ai" mention).
+_GENERIC = frozenset(
+    "introduction intro advanced fundamentals engineering development analytics science program programme course "
+    "formation cours strategy leaders for and the with".split()
+)
+
+
+def _words_all(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9+#']{2,}", _norm(text)))
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in _words_all(text) if len(w) >= 3 and w not in _GENERIC}
+
+
 def match_products(text: str, products: list[Product]) -> list[tuple[Product, int]]:
+    """Score every product against the text: 3 for the full name, 2 per keyword, 1 per distinctive name word or the
+    category. Keywords are optional, so a program added a minute ago without any is still found by its name."""
     t = _norm(text)
+    words = _words(text)
     scored = []
     for p in products:
         score = sum(2 if _norm(kw) in t else 0 for kw in p.keywords)
         score += 3 if _norm(p.name) in t else 0
+        score += len(_words(p.name) & words)
+        score += 1 if _norm(p.category) in words else 0
         if score:
             scored.append((p, score))
     return sorted(scored, key=lambda x: -x[1])

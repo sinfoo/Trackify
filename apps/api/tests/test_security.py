@@ -96,3 +96,55 @@ def test_no_agent_holds_a_forbidden_tool():
         assert not (spec.tools & FORBIDDEN_TOOLS), spec.id
     assert "approval.decide" not in SPECS["payment"].tools
     assert set(SPECS) == {"sales", "intelligence", "payment", "analyst", "strategy", "security"}
+
+
+def test_match_products_finds_a_program_by_name_words_and_category(db):
+    """A program added without keywords is still recommendable (name words, category); generic words match nothing."""
+    from decimal import Decimal
+
+    from app.agents import intelligence as ci
+    from app.models import Product, ProductStatus
+
+    p = Product(
+        slug="cloud-devops",
+        name="Cloud DevOps Bootcamp",
+        category="Infrastructure",
+        summary="s",
+        description="",
+        price=Decimal("1200"),
+        duration_weeks=6,
+        level="Intermediate",
+        learning_outcomes=[],
+        target_audience="",
+        keywords=[],
+        seats_total=10,
+        status=ProductStatus.ACTIVE,
+    )
+    db.add(p)
+    db.flush()
+    products = list(db.query(Product).filter(Product.status == ProductStatus.ACTIVE))
+    assert ci.match_products("do you have anything about devops?", products)[0][0].slug == "cloud-devops"
+    assert ci.match_products("I want an infrastructure course", products)[0][0].slug == "cloud-devops"
+    assert ci.match_products("tell me about cybersecurity", products)[0][0].slug == "cybersecurity"
+    assert all(q.slug != "cloud-devops" for q, _ in ci.match_products("I want to learn to code", products))
+
+
+def test_reply_validation_keeps_card_and_language_consistent(db):
+    """The model may rephrase the draft; it may not switch program or language."""
+    from app.agents import intelligence as ci
+    from app.agents import sales
+    from app.models import Product, ProductStatus
+
+    products = list(db.query(Product).filter(Product.status == ProductStatus.ACTIVE))
+    assert sales.is_french("Je veux apprendre la cybersécurité, quel programme me conseillez-vous ?")
+    assert not sales.is_french("Do you have anything about devops or cloud?")
+    draft = "For non-coders I recommend the Introduction to Artificial Intelligence course (690 TND)."
+    other = "I recommend AI Strategy for Leaders, 2400 TND, built for managers."
+    assert sales.safe_reply(draft, products, draft=draft, french=False)
+    assert not sales.safe_reply(other, products, draft=draft, french=False)
+    assert not sales.safe_reply(
+        "Oui, nous proposons le Cloud DevOps Bootcamp pour 6 semaines.", products, draft=draft, french=False
+    )
+    assert ci.match_products("Je veux une formation en data", products)[0][0].slug == "data-science"
+    assert sales.recommend_for("I am a marketing manager who never coded", products).slug == "intro-ai"
+    assert sales.recommend_for("I am a CEO and need an AI strategy for my company", products).slug == "ai-leadership"

@@ -79,7 +79,8 @@ export const publicApi = {
 
 // ---------- buyer account gate ----------
 
-const PENDING_ENROLL = "enroll.pending"; // sessionStorage: {product_id} to resume right after sign-in
+const PENDING_ENROLL = "enroll.pending"; // sessionStorage: {product_id, at} to resume right after sign-in
+const PENDING_TTL_MS = 15 * 60_000; // an abandoned gate must not enroll the buyer in something later
 
 export const buyerSignInUrl = (next: string) => `/login?as=buyer&next=${encodeURIComponent(next)}`;
 
@@ -90,7 +91,7 @@ export const buyerSignInUrl = (next: string) => `/login?as=buyer&next=${encodeUR
  */
 export function gateToBuyerSignIn(e: unknown, productId?: string): boolean {
   if (!(e instanceof ApiError) || e.code !== "BUYER_ACCOUNT_REQUIRED" || e.status !== 401 || typeof window === "undefined") return false;
-  if (productId) sessionStorage.setItem(PENDING_ENROLL, JSON.stringify({ product_id: productId }));
+  if (productId) sessionStorage.setItem(PENDING_ENROLL, JSON.stringify({ product_id: productId, at: Date.now() }));
   const { pathname, search } = window.location;
   // Outside React (shared helper): a full navigation is fine, the login page is a different layout anyway.
   window.location.assign(buyerSignInUrl(pathname + search));
@@ -101,17 +102,18 @@ export function gateToBuyerSignIn(e: unknown, productId?: string): boolean {
  * Right after a buyer signed in or up: attach the guest conversation (if any) to the account, then finish the enroll
  * that was interrupted by the gate. Returns where to go next, or null when there was nothing pending.
  */
-export async function resumeBuyerIntent(): Promise<string | null> {
+export async function resumeBuyerIntent(fromGate: boolean): Promise<string | null> {
   const s = loadSession();
   if (s) await publicApi.linkConversation(s).catch(() => {}); // stale token: nothing to attach
-  let pending: { product_id?: string } | null = null;
+  let pending: { product_id?: string; at?: number } | null = null;
   try {
     pending = JSON.parse(sessionStorage.getItem(PENDING_ENROLL) ?? "null");
   } catch {
     pending = null;
   }
   sessionStorage.removeItem(PENDING_ENROLL);
-  if (!pending?.product_id) return null;
+  // Only the sign-in the gate itself opened (?as=buyer) may finish the enroll, and only while the intent is fresh.
+  if (!fromGate || !pending?.product_id || !pending.at || Date.now() - pending.at > PENDING_TTL_MS) return null;
   try {
     return `/checkout/${await enrollInProduct(pending.product_id)}`;
   } catch (e) {
