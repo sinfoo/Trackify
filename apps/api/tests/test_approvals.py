@@ -60,6 +60,21 @@ def decide(db, ar, email, decision, notes="ok"):
 # ---------------------------------------------------------------- service level (always on)
 
 
+def test_expired_refund_approval_frees_the_refund(db):
+    from datetime import timedelta
+
+    from app.db.base import utcnow
+
+    tx, ar = refund_request(db)
+    ar.expires_at = utcnow() - timedelta(minutes=1)
+    db.commit()
+    assert approvals.expire_stale(db) == 1
+    db.commit()
+    assert db.scalar(select(Refund).where(Refund.approval_id == ar.id)).status == "EXPIRED"
+    again = orchestrator.request_refund(db, tx, user(db, "finance@demo.techx"), "second try")
+    assert again.status == ApprovalStatus.PENDING_REVIEW
+
+
 def test_refund_is_never_immediate(db):
     tx, ar = refund_request(db)
     assert tx.status == TxStatus.SUCCEEDED

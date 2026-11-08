@@ -398,6 +398,8 @@ function HistorySection({
 }) {
   const analyze = useAnalyze(customerId);
   const h = query.data;
+  const { data: me } = useMe();
+  const canPayments = can(me, "payments:read"); // the API omits transactions without it
 
   const convCols: Column<AdminConversation>[] = [
     { key: "date", header: "Started", cell: (x) => <TimeAgo date={x.created_at} /> },
@@ -498,7 +500,7 @@ function HistorySection({
         <TabsList className="flex-wrap">
           <TabsTrigger value="conversations">Conversations{count(h?.conversations.length)}</TabsTrigger>
           <TabsTrigger value="orders">Orders{count(h?.orders.length)}</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions{count(h?.transactions.length)}</TabsTrigger>
+          {canPayments && <TabsTrigger value="transactions">Transactions{count(h?.transactions.length)}</TabsTrigger>}
           <TabsTrigger value="enrollments">Enrollments{count(h?.enrollments.length)}</TabsTrigger>
         </TabsList>
         <TabsContent value="conversations" className="mt-3">

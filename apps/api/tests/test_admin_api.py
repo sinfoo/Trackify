@@ -227,6 +227,27 @@ def test_reports_csv(client, db):
     assert client.get(f"{V}/reports/passwords.csv").status_code in (404, 422)
 
 
+def test_reports_csv_follow_screen_permissions(client, db):
+    # sales has analytics:read but neither payments:read nor security:read
+    paid(db)
+    db.close()
+    as_(client, "sales@demo.techx")
+    assert client.get(f"{V}/reports/financial.csv").status_code == 200
+    assert client.get(f"{V}/reports/transactions.csv").status_code == 403
+    assert client.get(f"{V}/reports/security.csv").status_code == 403
+
+
+def test_customer_history_hides_transactions_without_payments_read(client, db):
+    tx, _ = paid(db)
+    cid = tx.customer_id
+    db.close()
+    as_(client, "sales@demo.techx")
+    h = client.get(f"{V}/customers/{cid}/history").json()
+    assert h["transactions"] == [] and len(h["orders"]) == 1
+    as_(client, "finance@demo.techx")
+    assert len(client.get(f"{V}/customers/{cid}/history").json()["transactions"]) == 1
+
+
 @needs_route("GET", "/analytics/definitions")
 def test_analytics_definitions(client):
     as_(client, "viewer@demo.techx")

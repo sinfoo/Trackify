@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import AppError, conflict
 from app.db.base import utcnow
-from app.models import ApprovalDecision, ApprovalRequest, ApprovalStatus, User
+from app.models import ApprovalDecision, ApprovalRequest, ApprovalStatus, Refund, User
 from app.services import audit, events
 
 OPEN = (ApprovalStatus.PENDING_REVIEW, ApprovalStatus.INFO_REQUESTED)
@@ -66,22 +66,30 @@ def request(
     return ar
 
 
+def _expire(db: Session, ar: ApprovalRequest) -> None:
+    ar.status = ApprovalStatus.EXPIRED
+    # A refund whose approval lapsed must not stay PENDING_APPROVAL, or it blocks every new refund request.
+    for r in db.scalars(select(Refund).where(Refund.approval_id == ar.id, Refund.status == "PENDING_APPROVAL")):
+        r.status = "EXPIRED"
+    audit.record(
+        db,
+        actor_type="system",
+        actor_id="system",
+        action="approval.expired",
+        resource_type="approval",
+        resource_id=ar.id,
+    )
+
+
 def expire_stale(db: Session) -> int:
-    n = 0
-    for ar in db.scalars(
-        select(ApprovalRequest).where(ApprovalRequest.status.in_(OPEN), ApprovalRequest.expires_at < utcnow())
-    ):
-        ar.status = ApprovalStatus.EXPIRED
-        audit.record(
-            db,
-            actor_type="system",
-            actor_id="system",
-            action="approval.expired",
-            resource_type="approval",
-            resource_id=ar.id,
+    stale = list(
+        db.scalars(
+            select(ApprovalRequest).where(ApprovalRequest.status.in_(OPEN), ApprovalRequest.expires_at < utcnow())
         )
-        n += 1
-    return n
+    )
+    for ar in stale:
+        _expire(db, ar)
+    return len(stale)
 
 
 def decide(db: Session, ar: ApprovalRequest, user: User, decision: str, notes: str) -> ApprovalRequest:
@@ -93,7 +101,7 @@ def decide(db: Session, ar: ApprovalRequest, user: User, decision: str, notes: s
     if ar.status not in OPEN:
         raise conflict("APPROVAL_CLOSED", f"Approval is already {ar.status}")
     if ar.expires_at < utcnow():
-        ar.status = ApprovalStatus.EXPIRED
+        _expire(db, ar)
         db.commit()  # persist the expiry even though the decision is refused
         raise conflict("APPROVAL_EXPIRED", "Approval request has expired")
     if ar.requested_by_user_id and ar.requested_by_user_id == user.id and decision != "INFO_REQUESTED":

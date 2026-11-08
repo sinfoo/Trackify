@@ -127,7 +127,7 @@ def update_customer(
 
 
 @router.get("/customers/{cid}/history")
-def customer_history(cid: uuid.UUID, db: Session = Depends(get_db), _: User = Depends(require("customers:read"))):
+def customer_history(cid: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(require("customers:read"))):
     c = _customer(db, cid)
     convs = db.scalars(select(Conversation).where(Conversation.customer_id == c.id).order_by(Conversation.created_at))
     orders = db.scalars(select(Order).where(Order.customer_id == c.id).order_by(Order.created_at))
@@ -136,7 +136,8 @@ def customer_history(cid: uuid.UUID, db: Session = Depends(get_db), _: User = De
     return {
         "conversations": [conversation_out(x, db) for x in convs],
         "orders": [order_out(o, db) for o in orders],
-        "transactions": [tx_out(t) for t in txs],
+        # Transactions carry risk data: only for roles that can open /payments.
+        "transactions": [tx_out(t) for t in txs] if "payments:read" in user.permission_codes else [],
         "enrollments": [enrollment_out(e) for e in enrs],
     }
 

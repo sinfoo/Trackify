@@ -3,16 +3,16 @@ import io
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.v1.common import customer_out, iso
-from app.core.deps import require
+from app.core.deps import current_user, require
 from app.core.errors import not_found
 from app.db.base import get_db
-from app.models import AnalyticsSnapshot, Customer, SecurityEvent, Transaction
+from app.models import AnalyticsSnapshot, Customer, SecurityEvent, Transaction, User
 from app.services import analytics as svc
 
 router = APIRouter(tags=["analytics"], dependencies=[Depends(require("analytics:read"))])
@@ -213,13 +213,27 @@ def _rows(kind: str, db: Session, f: svc.Filters) -> tuple[list[str], list[list]
     return cols, [[r[c] for c in cols] for r in svc.agents(db, f)]
 
 
-REPORTS = {"financial", "customers", "transactions", "security", "agents"}
+# Each export needs the same permission as the screen showing that data (analytics:read alone is not enough).
+REPORTS = {
+    "financial": "analytics:read",
+    "customers": "customers:read",
+    "transactions": "payments:read",
+    "security": "security:read",
+    "agents": "agents:read",
+}
 
 
 @router.get("/reports/{kind}.csv")
-def report(kind: str, f: svc.Filters = F, db: Session = Depends(get_db)):
+def report(
+    kind: str,
+    request: Request,
+    f: svc.Filters = F,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
     if kind not in REPORTS:
         raise not_found("Report")
+    require(REPORTS[kind])(request, user, db)  # audited 403 when missing
     cols, rows = _rows(kind, db, f)
     buf = io.StringIO()
     w = csv.writer(buf)

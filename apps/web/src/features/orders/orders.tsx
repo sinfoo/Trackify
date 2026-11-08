@@ -17,7 +17,8 @@ import {
 } from "@/components/ui-kit";
 import { api } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
-import { qk } from "@/lib/queries";
+import { can } from "@/lib/permissions";
+import { qk, useMe } from "@/lib/queries";
 import type { Order, Paged } from "@/lib/types";
 import { BackLink, Detail, DetailList, Section, Timeline, useUrlParams } from "@/features/payments/shared";
 
@@ -124,6 +125,7 @@ export function OrdersView() {
 }
 
 export function OrderDetail({ id }: { id: string }) {
+  const { data: me } = useMe();
   const order = useQuery({ queryKey: [...qk.orders, id], queryFn: () => api.get<OrderDetailData>(`/orders/${id}`) });
   const o = order.data;
   const customerId = o?.customer.id;
@@ -185,9 +187,13 @@ export function OrderDetail({ id }: { id: string }) {
                 {o.transaction ? (
                   <span className="flex flex-wrap items-center gap-2">
                     <StatusBadge status={o.transaction.status} />
-                    <Link href={`/payments/${o.transaction.id}`} className="num text-sm text-info-text hover:underline">
-                      {o.transaction.reference}
-                    </Link>
+                    {can(me, "payments:read") ? (
+                      <Link href={`/payments/${o.transaction.id}`} className="num text-sm text-info-text hover:underline">
+                        {o.transaction.reference}
+                      </Link>
+                    ) : (
+                      <span className="num text-sm">{o.transaction.reference}</span>
+                    )}
                   </span>
                 ) : (
                   <span className="text-muted-foreground">No payment yet</span>

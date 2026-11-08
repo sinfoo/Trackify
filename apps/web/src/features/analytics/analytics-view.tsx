@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AgentAvatar, AGENT_META, ChartCard, DataTable, humanize, KpiCard, Money, PageHeader, SimulatedBadge, StatusBadge } from "@/components/ui-kit";
 import { buildUrl } from "@/lib/api";
+import { can } from "@/lib/permissions";
+import { useMe } from "@/lib/queries";
 import { formatMoney, formatNumber, formatPercent } from "@/lib/format";
 import type { AnalyticsFilters } from "@/lib/types";
 import {
@@ -31,7 +33,14 @@ import { Panel } from "./panel";
 
 const KEYS = ["date_from", "date_to", "product_id", "segment"] as const;
 export const PAYMENT_STATUSES = ["SUCCEEDED", "FAILED", "REQUIRES_APPROVAL", "PENDING", "PROCESSING", "CREATED", "REFUNDED", "CANCELLED"];
-const REPORTS = ["financial", "customers", "transactions", "security", "agents"] as const;
+// Same permission the API checks per export (apps/api/app/api/v1/analytics.py REPORTS).
+const REPORTS = {
+  financial: "analytics:read",
+  customers: "customers:read",
+  transactions: "payments:read",
+  security: "security:read",
+  agents: "agents:read",
+} as const;
 const ALL = "all";
 const label = (s: string) => humanize(String(s ?? "").toUpperCase());
 
@@ -56,6 +65,7 @@ function useFilters() {
 }
 
 export function AnalyticsView() {
+  const { data: me } = useMe();
   const { filters: f, set, clear } = useFilters();
   const defs = useDefinitions();
   const overview = useOverview(f);
@@ -156,7 +166,7 @@ export function AnalyticsView() {
         )}
         <div className="flex w-full flex-wrap items-center gap-2 border-t pt-3 lg:ml-auto lg:w-auto lg:border-0 lg:pt-0">
           <span className="text-sm text-muted-foreground">Export CSV</span>
-          {REPORTS.map((k) => (
+          {(Object.keys(REPORTS) as (keyof typeof REPORTS)[]).filter((k) => can(me, REPORTS[k])).map((k) => (
             <Button key={k} variant="outline" size="sm" asChild>
               <a href={buildUrl(`/reports/${k}.csv`, { ...f })} download={`${k}-report.csv`}>
                 <Download aria-hidden /> {label(k)}

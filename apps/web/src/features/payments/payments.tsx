@@ -88,17 +88,8 @@ const columns: Column<Transaction>[] = [
   { key: "product", header: "Product", cell: (t) => <span className="line-clamp-2 min-w-32">{t.product.name}</span> },
   { key: "amount", header: "Amount", align: "right", cell: (t) => <Money value={t.amount} currency={t.currency} /> },
   { key: "status", header: "Status", cell: (t) => <StatusBadge status={t.status} /> },
-  {
-    key: "provider",
-    header: "Provider",
-    cell: (t) => (
-      <span className="inline-flex items-center gap-2 whitespace-nowrap">
-        <span className="text-sm">{t.provider}</span>
-        <SimulatedBadge />
-      </span>
-    ),
-  },
-  { key: "method", header: "Method", cell: (t) => <PaymentMethod token={t.payment_method} /> },
+  // ponytail: method hidden below 2xl so Risk and Date fit at 1440px; it stays on the detail page.
+  { key: "method", header: "Method", cell: (t) => <PaymentMethod token={t.payment_method} />, className: "hidden 2xl:table-cell" },
   { key: "risk", header: "Risk", cell: (t) => <RiskScore score={t.risk_score} /> },
   { key: "date", header: "Date", cell: (t) => <TimeAgo date={t.created_at} /> },
 ];
@@ -384,7 +375,7 @@ export function TransactionDetail({ id }: { id: string }) {
                         <span className="num text-xs text-muted-foreground">{e.event_type}</span>
                       </div>
                       <p className="mt-1.5 text-sm">{e.description}</p>
-                      <Link href={`/security?event=${e.id}`} className="mt-1 inline-block text-sm text-info-text hover:underline">
+                      <Link href={`/security/${e.id}`} className="mt-1 inline-block text-sm text-info-text hover:underline">
                         Open in Security
                       </Link>
                     </li>

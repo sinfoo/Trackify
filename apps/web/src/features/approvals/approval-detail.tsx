@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CircleCheck, CircleHelp, CircleX, Lock, ShieldAlert, UserCheck, Users } from "lucide-react";
+import { ArrowLeft, CircleCheck, CircleHelp, CircleX, Loader2, Lock, ShieldAlert, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -128,6 +128,9 @@ export function ApprovalDetailView({ id }: { id: string }) {
   const canDecide = can(me, "approvals:decide");
   const mine = !!me && !!a.requested_by_user && a.requested_by_user.toLowerCase() === me.email.toLowerCase();
   const err = decide.error ? decisionError(decide.error) : null;
+  // Approving runs the payment and the analyst/strategy agents server-side: several seconds, so show progress.
+  const busy = (d: Decision, Icon: typeof CircleCheck) =>
+    decide.isPending && decide.variables === d ? <Loader2 aria-hidden className="animate-spin" /> : <Icon aria-hidden />;
 
   return (
     <>
@@ -273,13 +276,13 @@ export function ApprovalDetailView({ id }: { id: string }) {
                 </div>
                 <div className="grid gap-2">
                   <Button onClick={() => submit("approve")} disabled={decide.isPending}>
-                    <CircleCheck aria-hidden /> Approve
+                    {busy("approve", CircleCheck)} {decide.isPending && decide.variables === "approve" ? "Approving…" : "Approve"}
                   </Button>
                   <Button variant="destructive" onClick={() => submit("reject")} disabled={decide.isPending}>
-                    <CircleX aria-hidden /> Reject
+                    {busy("reject", CircleX)} Reject
                   </Button>
                   <Button variant="outline" onClick={() => submit("request-information")} disabled={decide.isPending}>
-                    <CircleHelp aria-hidden /> Request information
+                    {busy("request-information", CircleHelp)} Request information
                   </Button>
                 </div>
                 {err && (

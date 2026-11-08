@@ -1,8 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Info, type LucideIcon } from "lucide-react";
-import { AgentAvatar } from "@/components/ui-kit";
+import { Info, Lock, type LucideIcon } from "lucide-react";
+import { AgentAvatar, EmptyState, PageHeader } from "@/components/ui-kit";
+import { can } from "@/lib/permissions";
+import { useMe } from "@/lib/queries";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -125,3 +127,16 @@ export function errorText(err: unknown, fallback = "Something went wrong."): str
 /** Radix Select cannot hold "" values; use this sentinel for "any". */
 export const ALL = "all";
 export const unAll = (v: string | null | undefined) => (!v || v === ALL ? undefined : v);
+
+/** Page-level permission gate: a clear "no access" state instead of zeroed KPIs and 403 errors. UI only, the API enforces. */
+export function PageGuard({ perm, title, children }: { perm: string; title: string; children: ReactNode }) {
+  const { data: me, isPending } = useMe();
+  if (isPending) return null;
+  if (can(me, perm)) return <>{children}</>;
+  return (
+    <>
+      <PageHeader title={title} />
+      <EmptyState icon={Lock} title="Your role cannot open this page" description={`It needs the ${perm} permission. Ask an administrator if you need access.`} />
+    </>
+  );
+}
