@@ -33,7 +33,7 @@ const HEARTBEAT_TIMEOUT_MS = 45_000; // server pings every 20s
 
 export function invalidateForEvent(qc: QueryClient, type: string) {
   const keys: (readonly string[])[] = [];
-  if (type.startsWith("payment.")) keys.push(qk.payments, qk.orders, qk.analytics);
+  if (type.startsWith("payment.")) keys.push(qk.payments, qk.orders, qk.analytics, qk.customers);
   if (type === "security.alert") keys.push(qk.security);
   if (type.startsWith("approval.")) keys.push(qk.approvals);
   if (type === "analytics.updated") keys.push(qk.analytics);

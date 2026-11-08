@@ -204,3 +204,15 @@ def test_http_refund_request_creates_approval_not_refund(client, db):
         select(ApprovalRequest).where(ApprovalRequest.transaction_id == tx.id, ApprovalRequest.action == "REFUND")
     )
     assert ar is not None and ar.status == ApprovalStatus.PENDING_REVIEW
+
+
+def test_approval_decision_closes_the_alerts_behind_the_hold(db):
+    from app.models import SecurityEvent
+
+    _, tx, ar = held(db)
+    open_before = db.scalars(select(SecurityEvent).where(SecurityEvent.transaction_id == tx.id)).all()
+    assert open_before and all(e.status == "OPEN" for e in open_before)
+    decide(db, ar, "security@demo.techx", "APPROVED", "customer verified")
+    db.expire_all()
+    events = db.scalars(select(SecurityEvent).where(SecurityEvent.transaction_id == tx.id)).all()
+    assert all(e.status == "RESOLVED" and "approval decision" in e.resolution_note for e in events)

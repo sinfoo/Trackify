@@ -4,6 +4,8 @@ const API_URL = process.env.API_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
   agentRules: false,
+  // Demo scenarios run several agents (and a real LLM) inside one request: allow it to finish.
+  experimental: { proxyTimeout: 120_000 },
   env: {
     NEXT_PUBLIC_WS_URL: process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/events",
   },

@@ -31,6 +31,7 @@ from app.models import (
     PaymentSession,
     Product,
     Refund,
+    SecurityEvent,
     Transaction,
     TxStatus,
     User,
@@ -620,6 +621,13 @@ def on_approval_decided(db: Session, ar: ApprovalRequest, user: User) -> None:
     tx = db.get(Transaction, ar.transaction_id) if ar.transaction_id else None
     wf = db.scalar(select(Workflow).where(Workflow.transaction_id == ar.transaction_id)) if tx else None
     actor = f"user:{user.email}"
+    if tx and ar.status in (ApprovalStatus.APPROVED, ApprovalStatus.REJECTED):
+        # The human decision closes the alerts that caused the hold.
+        for ev in db.scalars(
+            select(SecurityEvent).where(SecurityEvent.transaction_id == tx.id, SecurityEvent.status == "OPEN")
+        ):
+            ev.status, ev.resolved_by_id, ev.resolved_at = "RESOLVED", user.id, utcnow()
+            ev.resolution_note = f"Closed by approval decision ({ar.status.lower()}) by {user.email}"
     if ar.action == "RELEASE_PAYMENT" and tx:
         if ar.status == ApprovalStatus.APPROVED:
             if wf:

@@ -136,7 +136,9 @@ function SidebarContent({ user, rail, onNavigate }: { user: User; rail: Rail; on
         <Logo compact={rail === "always"} railAtMd={rail === "md-only"} inverted />
       </div>
       <nav aria-label="Main" className="flex-1 overflow-y-auto px-2 py-3">
-        {NAV.map((g, gi) => (
+        {NAV.map((g) => ({ ...g, items: g.items.filter((i) => !i.perm || can(user, i.perm)) }))
+          .filter((g) => g.items.length > 0)
+          .map((g, gi) => (
           <div key={g.group ?? gi} className={cn(gi > 0 && "mt-4")}>
             {g.group ? (
               <p className={cn("mb-1 px-3 text-xs font-medium tracking-wider text-sidebar-muted uppercase", hideInRail)}>
