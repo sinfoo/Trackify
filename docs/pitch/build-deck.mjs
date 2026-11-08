@@ -1,6 +1,7 @@
 // Trackify pitch deck generator (16:9).
 // Run:   node build-deck.mjs            -> Trackify-pitch.pptx            (13 slides, 5-minute pitch)
 //        node build-deck.mjs --extended -> Trackify-pitch-extended.pptx   (27 slides, feature deep dive)
+//        node build-deck.mjs --pitch5   -> Trackify-pitch-5min.pptx       (9 slides, 5-minute jury pitch; script in PITCH_SCRIPT.md)
 // Deps:  npm i (pptxgenjs is the only dependency)
 // Assets: assets/wordmark.png (python make-wordmark.py) and the product mark.
 import pptxgen from "pptxgenjs";
@@ -10,7 +11,10 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EXT = process.argv.includes("--extended");
-const OUT = join(HERE, EXT ? "Trackify-pitch-extended.pptx" : "Trackify-pitch.pptx");
+const P5 = process.argv.includes("--pitch5") && !EXT;
+// 5-minute cut: story, problem, reveal, what it does, how the agents connect, the human in the loop, impact, close.
+const P5_KEEP = new Set([1, 2, 3, 4, 5, 7, 10, 11, 13]);
+const OUT = join(HERE, EXT ? "Trackify-pitch-extended.pptx" : P5 ? "Trackify-pitch-5min.pptx" : "Trackify-pitch.pptx");
 const SHOTS = join(HERE, "..", "screenshots");
 const MARK = join(HERE, "..", "..", "design_handoff_trackify", "assets", "trackify-mark.png");
 const WORDMARK = join(HERE, "assets", "wordmark.png");
@@ -40,7 +44,8 @@ const C = {
 };
 const F = { head: "Arial Black", body: "Segoe UI", mono: "Consolas" };
 const W = 10, H = 5.625, M = 0.5, GAP = 0.35;
-const TOTAL = EXT ? 27 : 13;
+const TOTAL = EXT ? 27 : P5 ? P5_KEEP.size : 13;
+let block = 0;
 let slideNo = 0;
 
 const pres = new pptxgen();
@@ -123,7 +128,12 @@ function footer(s) {
   mono(s, `${String(slideNo).padStart(2, "0")} / ${TOTAL}`, { x: W - M - 1, y: 5.27, w: 1, h: 0.22, fontSize: 9, color: C.muted, align: "right", valign: "middle" });
 }
 
+// Slides left out of a cut still run their drawing code against a no-op proxy, so one source serves every deck.
+const NOOP = new Proxy({}, { get: () => () => NOOP, set: () => true });
+
 function slide(notes) {
+  block += 1;
+  if (P5 && !P5_KEEP.has(block)) return NOOP;
   slideNo += 1;
   const s = pres.addSlide();
   s.background = { color: C.bg };
