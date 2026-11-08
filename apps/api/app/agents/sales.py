@@ -351,7 +351,7 @@ def run(ctx: AgentContext, payload: dict) -> tuple[str, dict]:
             temperature=cfg.temperature,
             max_tokens=400,
         )
-        text = res.text.strip()[:1200]
+        text = plain_text(res.text)[:1200]
         if text and safe_reply(text, products):
             reply = text
             ctx.provider, ctx.tokens_in, ctx.tokens_out = res.provider, res.tokens_in, res.tokens_out
@@ -394,3 +394,11 @@ def safe_reply(text: str, products: list[Product]) -> bool:
         if amount not in prices:
             return False
     return not _FORBIDDEN.search(text)
+
+
+def plain_text(text: str) -> str:
+    """Chat bubbles render plain text: drop markdown emphasis/headings the model may add."""
+    text = re.sub(r"(\*\*|__)(.+?)\1", r"\2", text)
+    text = re.sub(r"(?<![\w*])\*(?!\s)(.+?)(?<!\s)\*(?![\w*])", r"\1", text)
+    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.M)
+    return re.sub(r"^\s*[*•]\s+", "- ", text, flags=re.M).strip()

@@ -397,18 +397,19 @@ function ChatPane({
         <AgentAvatar agentId="sales" size="sm" />
         <div className="mr-auto min-w-0 leading-tight">
           <p className="text-sm font-semibold">Sales assistant</p>
-          <p className="text-xs text-muted-foreground">Screened by the security agent before every reply</p>
+          <p className="hidden text-xs text-muted-foreground sm:block">Screened by the security agent before every reply</p>
         </div>
         {canSpeak && (
           <div className="flex items-center gap-2">
             <Switch id="voice-out" checked={voiceOut} onCheckedChange={toggleVoiceOut} />
             <Label htmlFor="voice-out" className="flex items-center gap-1 text-sm">
-              <Volume2 aria-hidden className="size-4" /> Read replies aloud
+              <Volume2 aria-hidden className="size-4" />
+              <span className="sr-only sm:not-sr-only">Read replies aloud</span>
             </Label>
           </div>
         )}
-        <Button variant="ghost" size="sm" onClick={onReset}>
-          <RotateCcw aria-hidden /> New conversation
+        <Button variant="ghost" size="sm" onClick={onReset} aria-label="New conversation">
+          <RotateCcw aria-hidden /> <span className="hidden sm:inline">New conversation</span>
         </Button>
       </div>
 

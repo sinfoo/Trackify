@@ -4,7 +4,7 @@ import { chromium } from "@playwright/test";
 
 const OUT = process.argv[2];
 const b = await chromium.launch();
-const p = await b.newPage({ viewport: { width: 1366, height: 860 } });
+const p = await b.newPage({ viewport: { width: Number(process.env.VW ?? 1366), height: Number(process.env.VH ?? 860) } });
 const logs = [];
 p.on("console", (m) => m.type() === "error" && logs.push("console: " + m.text()));
 p.on("response", (r) => r.status() >= 400 && logs.push(`${r.status()} ${r.request().method()} ${r.url()}`));

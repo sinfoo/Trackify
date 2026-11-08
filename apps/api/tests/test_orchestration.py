@@ -290,3 +290,12 @@ def test_recommendation_request_is_not_routed_to_low_intent(client, db):
     wf = db.scalar(select(Workflow).where(Workflow.conversation_id == uuid.UUID(conv_id)))
     assert wf.context["recommended_product_id"]
     assert wf.state == WorkflowState.PRODUCT_RECOMMENDATION
+
+
+def test_llm_markdown_is_stripped_for_chat():
+    from app.agents.sales import plain_text
+
+    assert (
+        plain_text("Take **Intro to AI**.\n## Why\n* beginner friendly")
+        == "Take Intro to AI.\nWhy\n- beginner friendly"
+    )
