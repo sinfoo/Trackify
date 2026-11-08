@@ -1,6 +1,7 @@
 // Public (no-login) endpoints + the customer's conversation session kept in localStorage.
 import { api } from "@/lib/api";
 import type {
+  BuyerAccount,
   CheckoutSession,
   ConversationMessagesResponse,
   Offer,
@@ -10,6 +11,8 @@ import type {
 } from "@/lib/types";
 
 export const SESSION_KEY = "assistant.session";
+/** Fired on `window` when this tab saves or clears the session (the `storage` event only fires in other tabs). */
+export const SESSION_EVENT = "assistant.session";
 
 export interface StoredSession {
   conversation_id: string;
@@ -29,10 +32,22 @@ export function loadSession(): StoredSession | null {
 }
 export function saveSession(s: StoredSession) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+  window.dispatchEvent(new Event(SESSION_EVENT));
 }
 export function clearSession() {
   localStorage.removeItem(SESSION_KEY);
+  window.dispatchEvent(new Event(SESSION_EVENT));
 }
+/** `useSyncExternalStore` pair: does this browser hold a conversation session? */
+export function subscribeSession(cb: () => void) {
+  window.addEventListener(SESSION_EVENT, cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    window.removeEventListener(SESSION_EVENT, cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+export const hasSession = () => loadSession() !== null;
 
 const opts = { noAuthRedirect: true } as const;
 const tok = (s: StoredSession) => ({ ...opts, headers: { "X-Conversation-Token": s.access_token } });
@@ -42,6 +57,7 @@ export const publicApi = {
   offer: (slug: string) => api.get<Offer>(`/public/offers/${encodeURIComponent(slug)}`, opts),
   start: (body: StartConversationRequest) => api.post<StartConversationResponse>("/public/conversations", body, opts),
   conversation: (s: StoredSession) => api.get<ConversationMessagesResponse>(`/public/conversations/${s.conversation_id}`, tok(s)),
+  account: (s: StoredSession) => api.get<BuyerAccount>(`/public/conversations/${s.conversation_id}/account`, tok(s)),
   send: (s: StoredSession, content: string) =>
     api.post<ConversationMessagesResponse>(`/public/conversations/${s.conversation_id}/messages`, { content }, tok(s)),
   enroll: (s: StoredSession, product_id: string) =>

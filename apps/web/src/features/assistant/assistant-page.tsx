@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { AGENT_META, agentColors } from "@/components/ui-kit";
@@ -24,6 +25,7 @@ const IDLE: AssistantActivity = { busy: false, asked: false, recommended: false,
 export function AssistantPage({ initialQuestion }: { initialQuestion?: string }) {
   const router = useRouter();
   const [act, setAct] = useState<AssistantActivity>(IDLE);
+  const [hasSession, setHasSession] = useState(false);
   // Relay stage while a reply is in flight: Security -> Sales -> Intelligence on a timer; all ticked briefly after.
   const [stage, setStage] = useState(-1);
   const [replied, setReplied] = useState(false);
@@ -61,7 +63,10 @@ export function AssistantPage({ initialQuestion }: { initialQuestion?: string })
         initialQuestion={initialQuestion}
         extraChips={INJECTION}
         onActivity={onActivity}
-        onSession={(s) => !s && setAct(IDLE)}
+        onSession={(s) => {
+          setHasSession(!!s);
+          if (!s) setAct(IDLE);
+        }}
         className="min-h-[680px]"
       />
       <aside className="flex flex-col gap-3.5">
@@ -119,6 +124,11 @@ export function AssistantPage({ initialQuestion }: { initialQuestion?: string })
             >
               Resume checkout →
             </button>
+          )}
+          {hasSession && (
+            <Link href="/my" className="mt-2 inline-flex h-11 w-full items-center justify-center rounded-xl border border-hair bg-panel2 text-[13px] font-extrabold text-text no-underline hover:bg-panel3 hover:no-underline">
+              My Trackify
+            </Link>
           )}
         </div>
         <p className="px-1.5 text-xs leading-[1.5] text-t4">Name and email are optional. Voice mode asks for consent first and can be switched off at any time.</p>
