@@ -159,6 +159,7 @@ function AiTab({ enabled }: { enabled: boolean }) {
                 ["Default model", <span key="m" className="num text-xs">{ai.default_model || "Set per agent (below)"}</span>],
                 ["Anthropic", <StatusBadge key="a" status={ai.anthropic_configured ? "SUCCEEDED" : "DISABLED"} label={ai.anthropic_configured ? "Configured" : "Not configured"} />],
                 ["OpenAI", <StatusBadge key="o" status={ai.openai_configured ? "SUCCEEDED" : "DISABLED"} label={ai.openai_configured ? "Configured" : "Not configured"} />],
+                ["Google Gemini", <StatusBadge key="g" status={ai.gemini_configured ? "SUCCEEDED" : "DISABLED"} label={ai.gemini_configured ? "Configured" : "Not configured"} />],
                 ["Environment", <span key="env" className="num text-xs">{s.data?.environment}</span>],
               ]}
             />

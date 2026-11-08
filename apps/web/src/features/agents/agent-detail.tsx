@@ -184,6 +184,7 @@ const PROVIDERS = [
   { value: "mock", label: "Mock (deterministic)" },
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
+  { value: "gemini", label: "Google Gemini" },
 ];
 
 function ConfigForm({ agent, canWrite }: { agent: AgentDetailT; canWrite: boolean }) {

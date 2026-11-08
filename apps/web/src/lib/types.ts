@@ -563,7 +563,7 @@ export interface AuditVerify {
 
 // ---------- Settings ----------
 export interface AppSettings {
-  ai: { provider: string; default_model: string; anthropic_configured: boolean; openai_configured: boolean };
+  ai: { provider: string; default_model: string; anthropic_configured: boolean; openai_configured: boolean; gemini_configured?: boolean };
   payments: Record<string, unknown>;
   voice: { stt: "browser"; tts: "browser" };
   environment: string;
