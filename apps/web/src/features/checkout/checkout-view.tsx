@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CircleX, FlaskConical, Hand, Loader2, Lock, ShieldAlert } from "lucide-react";
+import { CircleX, Clock, FlaskConical, Hand, Loader2, Lock, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState, Money, StatusBadge, humanize } from "@/components/ui-kit";
@@ -35,6 +35,8 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
   const [outcome, setOutcome] = useState<{ status: PayStatus; message: string; ref: string; at: number } | null>(null);
   // One key per pay attempt: reused if the same attempt is retried after a network error, dropped once answered.
   const keyRef = useRef<string | null>(null);
+  // Guards a double click landing before React re-renders with `pending`.
+  const busy = useRef(false);
 
   const inReview = outcome?.status === "REQUIRES_APPROVAL";
   const q = useQuery({
@@ -58,7 +60,8 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
   }, [s, inReview, fresh, router, sessionId]);
 
   const pay = async () => {
-    if (!method || pending) return;
+    if (!method || busy.current) return;
+    busy.current = true;
     keyRef.current ??= newIdempotencyKey();
     setPending(true);
     setError(null);
@@ -68,7 +71,7 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
       const tx = r.transaction_reference || s?.transaction_reference || "";
       if (r.status === "SUCCEEDED") {
         router.push(`/success?ref=${encodeURIComponent(tx)}&session=${sessionId}`);
-        return;
+        return; // stay busy: the page is leaving
       }
       if (r.status === "FAILED") {
         router.push(`/payment-failed?session=${sessionId}&reason=${encodeURIComponent(r.message)}`);
@@ -80,20 +83,29 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
       // Network failure or 5xx: keep the key so pressing Pay again replays the same attempt safely.
       if (e instanceof ApiError && e.status < 500) keyRef.current = null;
       setError(e instanceof ApiError ? e.message : "Connection problem. Press Pay again to retry the same attempt.");
+      // Expired or already settled elsewhere: reload so the page shows the real state.
+      if (e instanceof ApiError && e.status === 409) void q.refetch();
     }
+    busy.current = false;
     setPending(false);
   };
 
   if (q.error) {
-    if (q.error instanceof ApiError && q.error.status === 404)
+    // 422 = malformed id in the URL: same answer as an unknown one.
+    if (q.error instanceof ApiError && (q.error.status === 404 || q.error.status === 422))
       return (
         <EmptyState
-          title="This checkout session was not found"
-          description="It may have expired. Start again from the assistant or the program page."
+          title="This checkout link does not work"
+          description="The link is incomplete or the checkout no longer exists. Pick the program again to open a new checkout."
           action={
-            <Button asChild variant="outline">
-              <Link href="/assistant">Back to the assistant</Link>
-            </Button>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button asChild>
+                <Link href="/offers">See programs</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/assistant">Ask the assistant</Link>
+              </Button>
+            </div>
           }
         />
       );
@@ -111,6 +123,8 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
   const finalBlock = s.status === "CANCELLED" || s.status === "BLOCKED";
   const held = !finalBlock && (s.status === "REQUIRES_APPROVAL" || (inReview && !(fresh && (s.status === "FAILED" || s.status === "SUCCEEDED"))));
   const blocked = finalBlock || outcome?.status === "BLOCKED";
+  const expired =
+    !held && !blocked && (s.status === "PENDING" || s.status === "FAILED") && !!s.expires_at && new Date(s.expires_at).getTime() < q.dataUpdatedAt; // as of the last fetch
 
   return (
     <div className="grid gap-6">
@@ -121,6 +135,8 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
             <ReviewState message={outcome?.message} reference={ref} />
           ) : blocked ? (
             <BlockedState message={outcome?.message} reference={ref} />
+          ) : expired ? (
+            <ExpiredState slug={s.product.slug} />
           ) : s.status === "SUCCEEDED" ? (
             <p role="status" className="flex items-center gap-2 text-muted-foreground">
               <Loader2 aria-hidden className="size-4 animate-spin" /> Payment confirmed, opening your receipt
@@ -175,6 +191,9 @@ export function CheckoutView({ sessionId }: { sessionId: string }) {
                 {pending ? <Loader2 aria-hidden className="animate-spin" /> : <Lock aria-hidden />}
                 {pending ? "Processing" : <>Pay <Money trim value={s.amount} currency={s.currency} /></>}
               </Button>
+              <p role="status" className="mt-3 text-sm text-muted-foreground">
+                {pending && "The security agent is checking this payment, then the payment agent runs it. This takes a few seconds."}
+              </p>
             </form>
           )}
         </section>
@@ -237,6 +256,25 @@ function ReviewState({ message, reference }: { message?: string; reference: stri
       <p className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
         <Loader2 aria-hidden className="size-4 animate-spin" /> Waiting for a decision
       </p>
+    </div>
+  );
+}
+
+function ExpiredState({ slug }: { slug?: string }) {
+  return (
+    <div role="status">
+      <span className="inline-flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Clock aria-hidden className="size-5" />
+      </span>
+      <h2 id="pay-h" className="mt-3 text-xl font-semibold">
+        This checkout has expired
+      </h2>
+      <p className="mt-2 max-w-prose text-muted-foreground">
+        Checkouts stay open for a limited time. Nothing was charged. Enroll again from the program page to get a fresh one.
+      </p>
+      <Button asChild className="mt-5">
+        <Link href={slug ? `/offers/${slug}` : "/offers"}>Back to the program</Link>
+      </Button>
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2, Loader2, MessageCircle, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, Money } from "@/components/ui-kit";
 import { ApiError } from "@/lib/api";
 import type { Offer } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { enrollInProduct, publicApi } from "./api";
+import { enrollInProduct, loadSession, publicApi } from "./api";
 
 export const offersKey = ["public", "offers"] as const;
 
@@ -20,19 +20,58 @@ export function useOffers() {
   return useQuery({ queryKey: offersKey, queryFn: publicApi.offers, staleTime: 60_000 });
 }
 
+const journeyKey = ["public", "journey"] as const;
+
+/** What this browser's conversation already owns: enrolled programs and open checkouts. Null without a session. */
+function useJourney() {
+  return useQuery({
+    queryKey: journeyKey,
+    queryFn: async () => {
+      const s = loadSession();
+      return s ? ((await publicApi.conversation(s)).journey ?? null) : null;
+    },
+    retry: false,
+  });
+}
+
 export function EnrollButton({ offer, className, size = "lg" }: { offer: Pick<Offer, "id" | "name" | "seats_left">; className?: string; size?: "lg" | "default" }) {
   const router = useRouter();
+  const qc = useQueryClient();
+  const { data: journey } = useJourney();
   const [pending, setPending] = useState(false);
   const soldOut = offer.seats_left <= 0;
+  const enrolled = journey?.enrolled_product_ids.includes(offer.id);
+  const openCheckout = journey?.open_checkouts.find((c) => c.product_id === offer.id);
   const go = async () => {
     setPending(true);
     try {
       router.push(`/checkout/${await enrollInProduct(offer.id)}`);
+      // Back from checkout keeps this component alive: refreshed journey turns it into "Resume checkout".
+      void qc.invalidateQueries({ queryKey: journeyKey });
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not start enrollment. Try again.");
+      if (e instanceof ApiError && e.code === "ALREADY_ENROLLED") {
+        toast.success(e.message);
+        void qc.invalidateQueries({ queryKey: journeyKey });
+      } else toast.error(e instanceof ApiError ? e.message : "Could not start enrollment. Try again.");
       setPending(false);
     }
   };
+  if (enrolled)
+    return (
+      <Button size={size} variant="outline" className={cn("px-4", className)} disabled>
+        <CheckCircle2 aria-hidden className="text-success" /> Enrolled
+        <span className="sr-only"> in {offer.name}</span>
+      </Button>
+    );
+  if (openCheckout)
+    return (
+      <Button asChild size={size} className={cn("px-4", className)}>
+        <Link href={`/checkout/${openCheckout.session_id}`}>
+          <ArrowRight aria-hidden /> Resume checkout
+          <span className="sr-only"> for {offer.name}</span>
+        </Link>
+      </Button>
+    );
   return (
     <Button size={size} className={cn("px-4", className)} onClick={go} disabled={pending || soldOut}>
       {pending ? <Loader2 aria-hidden className="animate-spin" /> : <ArrowRight aria-hidden />}
@@ -88,7 +127,7 @@ export function OfferList({ limit }: { limit?: number }) {
               <SeatsLeft offer={o} />
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 md:flex-col md:items-end">
+          <div className="flex flex-col items-start gap-3 md:items-end">
             <Money trim value={o.price} currency={o.currency} className="text-xl font-semibold" />
             <div className="flex gap-2">
               <Button asChild variant="outline" size="lg" className="px-4">
@@ -146,6 +185,11 @@ export function OfferDetail({ slug }: { slug: string }) {
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight [overflow-wrap:anywhere]">{o.name}</h1>
         <p className="mt-3 max-w-2xl text-lg text-muted-foreground">{o.summary}</p>
+        {/* Small screens: price and Enroll up front; the full card sits below the content. */}
+        <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-3 lg:hidden">
+          <Money trim value={o.price} currency={o.currency} className="text-2xl font-semibold" />
+          <EnrollButton offer={o} />
+        </div>
         <p className="mt-6 max-w-2xl">{o.description}</p>
 
         <h2 className="mt-10 text-xl font-semibold">What you will be able to do</h2>

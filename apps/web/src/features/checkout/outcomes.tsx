@@ -2,21 +2,57 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CircleCheck, CircleX, Loader2, MessageCircle, RotateCcw, Star } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
+import { CircleCheck, CircleX, Loader2, MessageCircle, Receipt, RotateCcw, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Money, SimulatedBadge } from "@/components/ui-kit";
+import { EmptyState, Money, SimulatedBadge } from "@/components/ui-kit";
 import type { CheckoutSession } from "@/lib/types";
 import { ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { loadSession, publicApi, type StoredSession } from "@/features/public/api";
 
 export function SuccessView({ reference, session }: { reference?: string; session?: string }) {
+  const router = useRouter();
+  const qc = useQueryClient();
   const [receipt, setReceipt] = useState<CheckoutSession | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (session) publicApi.checkout(session).then(setReceipt, () => setReceipt(null));
-  }, [session]);
+    if (!session) return;
+    publicApi.checkout(session).then(
+      (r) => {
+        // Never confirm an enrollment the server does not confirm (typed or stale URL): show the real checkout.
+        if (r.status !== "SUCCEEDED") router.replace(`/checkout/${encodeURIComponent(session)}`);
+        else {
+          setReceipt(r);
+          void qc.invalidateQueries({ queryKey: ["public"] }); // seats left + "Enrolled" on program pages
+        }
+      },
+      () => setFailed(true), // fall back to the reference from the URL
+    );
+  }, [session, router, qc]);
+  if (!session && !reference)
+    return (
+      <EmptyState
+        className="mx-auto max-w-2xl"
+        icon={Receipt}
+        title="No receipt to show"
+        description="This page shows your confirmation right after a payment. Enroll in a program to get one."
+        action={
+          <Button asChild>
+            <Link href="/offers">See programs</Link>
+          </Button>
+        }
+      />
+    );
+  if (session && !receipt && !failed)
+    return (
+      <p role="status" className="mx-auto flex max-w-2xl items-center gap-2 text-muted-foreground">
+        <Loader2 aria-hidden className="size-4 animate-spin" /> Loading your receipt
+      </p>
+    );
   return (
     <div className="mx-auto grid max-w-2xl gap-8">
       <section className="rounded-xl border bg-card p-6 md:p-8">
@@ -64,7 +100,7 @@ export function SuccessView({ reference, session }: { reference?: string; sessio
         <div className="mt-6 flex flex-wrap gap-2">
           <Button asChild size="lg" className="px-4">
             <Link href="/assistant">
-              <MessageCircle aria-hidden /> Back to the assistant
+              <MessageCircle aria-hidden /> Ask the assistant
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="px-4">
@@ -77,6 +113,8 @@ export function SuccessView({ reference, session }: { reference?: string; sessio
   );
 }
 
+const FEEDBACK_KEY = "feedback.sent"; // conversation id that already rated: one rating per conversation
+
 function FeedbackForm() {
   const [session, setSession] = useState<StoredSession | null | undefined>(undefined);
   const [rating, setRating] = useState(0);
@@ -85,7 +123,11 @@ function FeedbackForm() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    queueMicrotask(() => setSession(loadSession()));
+    queueMicrotask(() => {
+      const s = loadSession();
+      setSession(s);
+      if (s && localStorage.getItem(FEEDBACK_KEY) === s.conversation_id) setState("sent");
+    });
   }, []);
   if (!session) return null; // no conversation to attach feedback to
 
@@ -103,6 +145,7 @@ function FeedbackForm() {
     setError(null);
     try {
       await publicApi.feedback(session, rating, comment.trim());
+      localStorage.setItem(FEEDBACK_KEY, session.conversation_id);
       setState("sent");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not send feedback. Try again.");
@@ -113,7 +156,7 @@ function FeedbackForm() {
   return (
     <form onSubmit={submit} className="rounded-xl border bg-card p-6">
       <fieldset>
-        <legend className="font-semibold">How was talking to the assistant?</legend>
+        <legend className="font-semibold">How was your experience?</legend>
         <div className="mt-3 flex gap-1">
           {[1, 2, 3, 4, 5].map((n) => (
             <label key={n} className="cursor-pointer rounded-md p-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring">
@@ -173,11 +216,15 @@ export function PaymentFailedView({ session, reason }: { session?: string; reaso
         Several failed attempts in a row get flagged by the security agent and held for a human to review.
       </p>
       <div className="mt-6 flex flex-wrap gap-2">
-        {session && (
+        {session ? (
           <Button asChild size="lg" className="px-4">
             <Link href={`/checkout/${encodeURIComponent(session)}`}>
               <RotateCcw aria-hidden /> Try another method
             </Link>
+          </Button>
+        ) : (
+          <Button asChild size="lg" className="px-4">
+            <Link href="/offers">See programs</Link>
           </Button>
         )}
         <Button asChild size="lg" variant="outline" className="px-4">
