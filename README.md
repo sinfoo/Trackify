@@ -17,7 +17,7 @@
   <a href="#security-model">Security</a> ·
   <a href="#testing">Testing</a> ·
   <a href="docs/DEMO_GUIDE.md">7-minute demo script</a> ·
-  <a href="docs/pitch/Trackify-pitch.pptx">Pitch deck</a>
+  <a href="#the-pitch">Pitch deck</a>
 </p>
 
 <p align="center">
@@ -44,6 +44,51 @@ A small training academy sells AI programs in Tunisian dinars. Instead of a sale
 A central **orchestrator** routes work between them on typed, validated outputs. Every execution, agent-to-agent message, state transition, approval and tool call is recorded in a hash-chained audit log you can replay from the console.
 
 Two sides, one account model, Fiverr-style: **buyers** chat, enroll, pay and follow their programs in a buyer dashboard; **business owners and staff** run the seller console. An owner account holds both and switches between them.
+
+---
+
+## The pitch
+
+Two decks live in [`docs/pitch`](docs/pitch): a **9-slide, 5-minute cut** with a spoken script ([PITCH_SCRIPT.md](docs/pitch/PITCH_SCRIPT.md)) and a **27-slide extended deck** with the product tour, the engines and the platform. Both are generated from code ([`build-deck.mjs`](docs/pitch/build-deck.mjs)).
+
+📥 [Trackify-pitch-5min.pptx](docs/pitch/Trackify-pitch-5min.pptx) · [Trackify.pptx](docs/pitch/Trackify.pptx) (extended) · [Trackify-pitch.pptx](docs/pitch/Trackify-pitch.pptx) (13 slides)
+
+### The 5-minute deck
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-01.png" alt="1. Title" /><br /><sub><b>1. Title</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-02.png" alt="2. The hook" /><br /><sub><b>2. The hook</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-03.png" alt="3. Three problems, one cause" /><br /><sub><b>3. Three problems, one cause</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-04.png" alt="4. Introducing Trackify" /><br /><sub><b>4. Introducing Trackify</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-05.png" alt="5. What Trackify does" /><br /><sub><b>5. What Trackify does</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-06.png" alt="6. How the agents connect" /><br /><sub><b>6. How the agents connect</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-07.png" alt="7. A human in the loop" /><br /><sub><b>7. A human in the loop</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-08.png" alt="8. What changes" /><br /><sub><b>8. What changes</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-5min/slide-09.png" alt="9. Conclusion" /><br /><sub><b>9. Conclusion</b></sub></td>
+  </tr>
+</table>
+
+### From the extended deck
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/pitch/preview-extended/slide-06.png" alt="Two sides, one platform" /><br /><sub><b>Two sides, one platform</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-extended/slide-13.png" alt="Payment state machine" /><br /><sub><b>Payment state machine</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/pitch/preview-extended/slide-14.png" alt="Risk engine, rule by rule" /><br /><sub><b>Risk engine, rule by rule</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-extended/slide-15.png" alt="Injection stopped at the door" /><br /><sub><b>Injection stopped at the door</b></sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/pitch/preview-extended/slide-16.png" alt="Every journey, replayable" /><br /><sub><b>Every journey, replayable</b></sub></td>
+    <td align="center"><img src="docs/pitch/preview-extended/slide-23.png" alt="Architecture and stack" /><br /><sub><b>Architecture and stack</b></sub></td>
+  </tr>
+</table>
 
 ---
 
